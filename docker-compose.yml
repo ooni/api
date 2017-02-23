@@ -17,7 +17,7 @@ rabbitmq:
 worker:
   extends:
     service: app
-  command: celery -A measurements.runcelery.celery worker -l info
+  command: celery -A measurements.runcelery.celery worker --concurrency=1 -l info
   links:
     - redis
     - rabbitmq
