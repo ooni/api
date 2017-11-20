@@ -9,6 +9,7 @@ import pathlib
 import connexion
 
 from measurements.api import api_private_blueprint
+from measurements.api.legacy_explorer import api_legacy_explorer_blueprint
 from measurements.pages import pages_blueprint, api_docs_blueprint
 
 HERE = os.path.abspath(os.path.dirname(__file__))
@@ -35,4 +36,5 @@ def register(app):
     app.register_blueprint(api_docs_blueprint, url_prefix='/api')
     app.register_blueprint(connexion_api.blueprint)
     app.register_blueprint(api_private_blueprint, url_prefix='/api/_')
+    app.register_blueprint(api_legacy_explorer_blueprint, url_prefix='/api/legacy_explorer')
     app.register_blueprint(pages_blueprint, url_prefix='')
