@@ -133,6 +133,20 @@ def list_files(
         'results': results
     })
 
+def fetch_autoclaved_text(filename, frame_off, frame_size, intra_off, intra_size):
+    range_header = "bytes={}-{}".format(frame_off, frame_off + frame_size - 1)
+    r = requests.get(urljoin(current_app.config['AUTOCLAVED_BASE_URL'], filename),
+            headers={"Range": range_header})
+    r.raise_for_status()
+    # @darkk how big can these lz4 frames even become? Should this be a concern?
+    blob = r.content
+    if len(blob) != frame_size:
+        raise RuntimeError('Failed to fetch LZ4 frame', len(blob), frame_size)
+    blob = lz4framed.decompress(blob)[intra_off:intra_off+intra_size]
+    if len(blob) != intra_size or blob[:1] != b'{' or blob[-1:] != b'}':
+        raise RuntimeError('Failed to decompress LZ4 frame to measurement.json', len(blob), intra_size, blob[:1], blob[-1:])
+    return blob # NB: it's not decoded intentionally to save CPU
+
 def get_measurement(measurement_id):
     # XXX this query is SUPER slow
     m = RE_MSM_ID.match(measurement_id)
@@ -163,13 +177,7 @@ def get_measurement(measurement_id):
         # XXX we should actually return a 404 here
         raise BadRequest("No measurement found")
 
-    range_header = "bytes={}-{}".format(msmt.frame_off, msmt.frame_off + msmt.frame_size - 1)
-    r = requests.get(urljoin(current_app.config['AUTOCLAVED_BASE_URL'], msmt.a_filename),
-            headers={"Range": range_header}, stream=True)
-
-    # XXX use for streaming support lz4framed.Decompressor
-    # @darkk how big can these lz4 frames even become? Should this be a concern?
-    msmt_data = lz4framed.decompress(r.raw.read())[msmt.intra_off:msmt.intra_off+msmt.intra_size]
+    msmt_data = fetch_autoclaved_text(msmt.a_filename, msmt.frame_off, msmt.frame_size, msmt.intra_off, msmt.intra_size)
 
     # XXX do we also want to replace on the fly the measurement_id inside of
     # the report itself?
@@ -279,7 +287,7 @@ def list_measurements(
     if probe_asn is not None:
         q = q.filter(Report.probe_asn == probe_asn)
     if test_name is not None:
-        q = q.filter(Report.test_name == test_name)
+        q = q.filter(Report.test_name == test_name) # FIXME: works only for well-known test names
     if since is not None:
         q = q.filter(Measurement.measurement_start_time > since)
     if until is not None:
