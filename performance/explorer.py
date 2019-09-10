@@ -32,6 +32,12 @@ class ExplorerTasks(TaskSet):
                                         'input': r['input']})
 
     @task
+    def monthly_coverage(self):
+        self.client.get("/api/_/countries_by_month")
+        self.client.get("/api/_/runs_by_month")
+        self.client.get("/api/_/asn_by_month")
+
+    @task
     def search_measurements(self):
         self.client.get("/api/v1/measurements", params={'probe_cc': 'CU', 'domain': 'ooni.io'})
 
