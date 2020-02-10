@@ -17,18 +17,17 @@ from sqlalchemy_utils import database_exists, create_database
 
 from measurements.config import request_id
 
-from flask import Flask
-from prometheus_flask_exporter import PrometheusMetrics
 from prometheus_client import Gauge
 
-app = Flask(__name__)
-registry = PrometheusMetrics(app).registry
-query_time = Gauge("query", "query", ["hash",], registry=registry)
+from flask import current_app
+
+query_time_gauge = None
 
 Base = declarative_base()
 
 
 def init_db(app):
+    global query_time_gauge
     if os.path.exists("/proc/sys/kernel/random/boot_id"):  # MacOS...
         with open("/proc/sys/kernel/random/boot_id") as fd:
             application_name = "measurements-{:d}-{}".format(os.getpid(), fd.read(8))
@@ -60,6 +59,13 @@ def init_db(app):
             reqid = application_name
         session.execute("set application_name = :reqid", {"reqid": reqid})
 
+    query_time_gauge = Gauge(
+        "query_time",
+        "query execution time",
+        ["hash",],
+        registry=app.prometheus_metrics.registry,
+    )
+
 
 def query_hash(q: str) -> str:
     return shake_128(q.encode()).hexdigest(4)
@@ -84,8 +90,10 @@ def init_query_logging(app):
     def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
         total_time = time.time() - conn.info["query_start_time"].pop(-1)
 
+        # Send query execution time to Prometheus with a hash of the statement
+        # a label
         qh = query_hash(statement)
-        query_time.labels(qh).set(total_time)
+        query_time_gauge.labels(qh).set(total_time)
 
         app.logger.debug("Query %s complete. Total time: %f", qh, total_time)
 
