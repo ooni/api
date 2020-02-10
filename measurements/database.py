@@ -23,7 +23,6 @@ query_time_gauge = Gauge("query", "query", ["hash",], registry=metrics.registry)
 Base = declarative_base()
 
 def init_db(app):
-    global query_time_gauge
     if os.path.exists("/proc/sys/kernel/random/boot_id"):  # MacOS...
         with open("/proc/sys/kernel/random/boot_id") as fd:
             application_name = "measurements-{:d}-{}".format(os.getpid(), fd.read(8))

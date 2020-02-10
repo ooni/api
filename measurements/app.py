@@ -116,8 +116,6 @@ def extract_client_ipaddr_for_throttling():
     return ipaddr
 
 
-from prometheus_flask_exporter import PrometheusMetrics
-
 def create_app(*args, testmode=False, **kw):
     from measurements import views
 
@@ -132,7 +130,6 @@ def create_app(*args, testmode=False, **kw):
     check_config(app.config)
 
     # Setup Database connector
-    app.prometheus_metrics = PrometheusMetrics(app)
     init_db(app)
 
     # Setup throttling
