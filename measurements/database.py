@@ -17,10 +17,11 @@ from sqlalchemy_utils import database_exists, create_database
 
 from measurements.config import request_id, metrics
 
-from prometheus_client import Gauge
+from prometheus_client import Summary
 
-query_time_gauge = Gauge("query", "query", ["hash",], registry=metrics.registry)
+query_time = Summary("query", "query", ["hash", ], registry=metrics.registry)
 Base = declarative_base()
+
 
 def init_db(app):
     if os.path.exists("/proc/sys/kernel/random/boot_id"):  # MacOS...
@@ -81,7 +82,7 @@ def init_query_logging(app):
         # Send query execution time to Prometheus with a hash of the statement
         # a label
         qh = query_hash(statement)
-        query_time_gauge.labels(qh).set(total_time)
+        query_time.labels(qh).observe(total_time)
 
         app.logger.debug("Query %s complete. Total time: %f", qh, total_time)
 
