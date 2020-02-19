@@ -173,6 +173,34 @@ paths:
 
         default:
           description: Default response
+
+  /measurement_meta:
+    get:
+      summary: ''
+      description: ''
+      operationId: 'measurements.api.get_measurement_meta'
+      parameters:
+        - name: report_id
+          in: query
+          type: string
+          description: The report_id to search measurements for
+        - name: input
+          in: query
+          type: string
+          minLength: 3 # `input` is handled by pg_trgm
+          description: The input (for example a URL or IP address) to search measurements for
+      responses:
+        '200':
+          description: Returns the list of measurement IDs for the specified criteria
+          schema:
+            $ref: "#/definitions/MeasurementList"
+        default:
+          description: Default response
+      x-code-samples:
+        - lang: 'curl'
+          source: |
+            curl "https://api.ooni.io/api/v1/measurement_meta?report_id=FIXME&input=FIXME"
+
   /files:
     get:
       summary: ''

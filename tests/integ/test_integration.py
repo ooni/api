@@ -53,7 +53,7 @@ def fastpath_dup_rid_input(app):
     Returns (rid, input, count)
     """
     sql = """
-    SELECT report_id, input,
+    SELECT report_id, input
     from fastpath
     group by report_id, input
     HAVING count(*) > 1
@@ -360,6 +360,63 @@ def test_list_files_range_cc_asn(client):
     url = "files?limit=1000&since=2019-12-01&until=2019-12-02&probe_cc=IR&probe_asn=AS44375"
     results = api(client, url)["results"]
     assert len(results) == 7
+
+
+# # get_measurement_meta # #
+
+
+def test_get_measurement_meta(client):
+    rid = "20200209T235610Z_AS22773_NqZSA7xdrVbZb6yO25E5a7HM2Zr7ENIwvxEC18a4TpfYOzWxOz"
+    inp = "http://www.theonion.com/"
+    response = api(client, f"measurement_meta?report_id={rid}&input={inp}")
+    assert response == {
+        "anomaly": False,
+        "confirmed": False,
+        "failure": False,
+        "fp_measurement_id": None,
+        "input": inp,
+        "measurement_id": "temp-id-381224597",
+        "measurement_start_time": "2020-02-09T23:57:26Z",
+        "mr_measurement_id": "temp-id-381224597",
+        "probe_asn": 22773,
+        "probe_cc": "US",
+        "report_id": rid,
+        "scores": "{}",
+        "test_name": "web_connectivity",
+        "test_start_time": "2020-02-09T23:56:06Z",
+        # "analysis": {"blocking": "http-diff",},
+        # "category_code": "SOCIAL",
+        # "network_name": "Fidget Unlimited",
+    }
+
+
+def test_get_measurement_meta_not_in_fp(client, nonfastpath_rid_input):
+    rid, inp = nonfastpath_rid_input
+    response = api(client, f"measurement_meta?report_id={rid}&input={inp}")
+    assert response["input"] == inp
+    assert response["scores"] == "{}"  # empty: not from fastpath
+
+
+def test_get_measurement_meta_only_in_fp(client, fastpath_rid_input):
+    rid, inp = fastpath_rid_input
+    response = api(client, f"measurement_meta?report_id={rid}&input={inp}")
+    assert response["input"] == inp
+    assert response["scores"] != "{}"  # from fastpath
+
+
+def test_get_measurement_meta_shared(client, shared_rid_input):
+    rid, inp = shared_rid_input
+    response = api(client, f"measurement_meta?report_id={rid}&input={inp}")
+    assert response["input"] == inp
+    assert response["scores"] != "{}"  # from fastpath
+
+
+def test_get_measurement_meta_duplicate_in_fp(client, fastpath_dup_rid_input):
+    rid, inp = fastpath_dup_rid_input
+    response = api(client, f"measurement_meta?report_id={rid}&input={inp}")
+    # TODO FIXME count duplicates and verify
+    assert response["input"] == inp
+    assert response["scores"] != "{}"  # from faspath
 
 
 # # list_measurements # #

@@ -297,6 +297,118 @@ def _merge_results(tmpresults):
     return tuple(resultsmap.values())
 
 
+def get_measurement_meta(report_id=None, input=None):
+    """Get metadata on one measurement by measurement_id + input
+    """
+    # TODO FIXME return category code, network_name and analysis
+    log = current_app.logger
+    ## Create measurement+report colums for SQL query
+    mrcols = [
+        literal_column("report.test_start_time").label("test_start_time"),
+        literal_column("measurement.measurement_start_time").label(
+            "measurement_start_time"
+        ),
+        func.concat(MSM_ID_PREFIX, "-", sql.text("measurement.msm_no")).label(
+            "measurement_id"
+        ),
+        literal_column("measurement.report_no").label("m_report_no"),
+        func.coalesce(sql.text("measurement.anomaly"), false()).label("anomaly"),
+        func.coalesce(sql.text("measurement.confirmed"), false()).label("confirmed"),
+        sql.text("measurement.exc IS NOT NULL AS failure"),
+        literal_column("measurement.exc").label("exc"),
+        # literal_column("measurement.residual_no").label("residual_no"),
+        literal_column("report.report_id").label("report_id"),
+        literal_column("report.probe_cc").label("probe_cc"),
+        literal_column("report.probe_asn").label("probe_asn"),
+        literal_column("report.test_name").label("test_name"),
+        literal_column("domain_input.input").label("input"),
+    ]
+
+    ## Create fastpath columns for query
+    fpcols = [
+        # We use test_start_time here as the batch pipeline has many NULL measurement_start_times
+        literal_column("measurement_start_time").label("test_start_time"),
+        literal_column("measurement_start_time").label("measurement_start_time"),
+        func.concat(FASTPATH_MSM_ID_PREFIX, sql.text("tid")).label("measurement_id"),
+        literal_column("anomaly").label("anomaly"),
+        literal_column("confirmed").label("confirmed"),
+        literal_column("msm_failure").label("failure"),
+        cast(sql.text("scores"), String).label("scores"),
+        literal_column("report_id"),
+        literal_column("probe_cc"),
+        literal_column("probe_asn"),
+        literal_column("test_name"),
+        literal_column("fastpath.input").label("input"),
+    ]
+    mrwhere = []
+    fpwhere = []
+    query_params = {}
+    query_params["report_id"] = report_id
+    mrwhere.append(sql.text("report.report_id = :report_id"))
+    fpwhere.append(sql.text("report_id = :report_id"))
+
+    # mrwhere.append(sql.text("report.input = :input"))
+    # fpwhere.append(sql.text("input = :input"))
+
+    mr_table = sql.table("measurement").join(
+        sql.table("report"), sql.text("measurement.report_no = report.report_no"),
+    )
+    fpq_table = sql.table("fastpath")
+
+    mr_table = mr_table.join(
+        sql.table("domain_input"),
+        sql.text("domain_input.input_no = measurement.input_no"),
+    )
+    fpq_table = fpq_table.join(
+        sql.table("domain_input"), sql.text("domain_input.input = fastpath.input")
+    )
+
+    query_params["input"] = input
+    mrwhere.append(sql.text("domain_input.input = :input"))
+    fpwhere.append(sql.text("domain_input.input = :input"))
+
+    # Assemble queries
+    mr_query = (select(mrcols).where(and_(*mrwhere)).select_from(mr_table)).alias("mr")
+    fp_query = (select(fpcols).where(and_(*fpwhere)).select_from(fpq_table)).alias("fp")
+
+    def coal(colname):
+        return func.coalesce(
+            literal_column(f"fp.{colname}"), literal_column(f"mr.{colname}")
+        ).label(colname)
+
+    merger = [
+        coal("test_start_time"),
+        coal("measurement_start_time"),
+        coal("measurement_id"),
+        literal_column("fp.measurement_id").label("fp_measurement_id"),
+        literal_column("mr.measurement_id").label("mr_measurement_id"),
+        coal("anomaly"),
+        coal("confirmed"),
+        coal("failure"),
+        func.coalesce(literal_column("fp.scores"), "{}").label("scores"),
+        coal("report_id"),
+        coal("probe_cc"),
+        coal("probe_asn"),
+        coal("test_name"),
+        coal("input"),
+    ]
+    j = fp_query.join(
+        mr_query,
+        sql.text("fp.input = mr.input AND fp.report_id = mr.report_id"),
+        full=True,
+    )
+    query = select(merger).select_from(j)
+
+    with sentry.configure_scope() as scope:
+        # Set query (without params) in Sentry scope for the rest of the API call
+        # https://github.com/getsentry/sentry-python/issues/184
+        scope.set_extra("sql_query", query)
+
+    q = current_app.db_session.execute(query, query_params)
+    x = q.fetchone()
+    return dict(x)
+
+
 def list_measurements(
     report_id=None,
     probe_asn=None,
