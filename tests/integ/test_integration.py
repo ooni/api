@@ -994,6 +994,11 @@ def test_private_api_website_urls(client, log):
     assert len(response["results"]) > 1
 
 
+def test_bug_backend_348(client, log):
+    # There should always be a next_url for whatsapp test results
+    response = api(client, "measurements?test_name=whatsapp")
+    assert response["metadata"]["next_url"] != None, jd(response)
+
 # def test_private_api_vanilla_tor_stats(client):
 #     url = "vanilla_tor_stats"
 #     response = privapi(client, url)
