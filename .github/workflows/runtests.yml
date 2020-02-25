@@ -4,7 +4,7 @@ on: push
 jobs:
   test:
     runs-on: ubuntu-latest
-    container: python:3.7.6
+    container: nikolaik/python-nodejs:python3.7-nodejs12
     services:
       postgres:
         image: postgres:9.6.17
