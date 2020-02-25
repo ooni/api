@@ -1,0 +1,30 @@
+name: OONI API tests
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container: python:3.7.6
+    services:
+      postgres:
+        image: postgres:9.6.17
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - name: Install node 6.6.0
+        run: |
+          rm -rf ~/.nvm
+          git clone https://github.com/creationix/nvm.git ~/.nvm
+          (cd ~/.nvm && git checkout `git describe --abbrev=0 --tags`)
+          source ~/.nvm/nvm.sh
+          nvm install 6.6.0
+      - name: Install dependencies
+        run: |
+          pip install -U pip setuptools wheel codecov
+          pip install -r requirements/main.txt
+          pip install -r requirements/tests.txt
+          npm install
+      - name: Init the databse
+        run: bash scripts/travis_init_db.sh
+      - name: Run tests
+        run: make APP_ENV=production test
