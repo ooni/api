@@ -17,7 +17,7 @@ jobs:
           pip install -r requirements/main.txt
           pip install -r requirements/tests.txt
           npm install
-          apt install libpq-dev
+          apt install -y libpq-dev
       - name: Init the databse
         run: bash scripts/travis_init_db.sh
       - name: Run tests
