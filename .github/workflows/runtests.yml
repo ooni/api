@@ -11,13 +11,6 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - name: Install node 6.6.0
-        run: |
-          rm -rf ~/.nvm
-          git clone https://github.com/creationix/nvm.git ~/.nvm
-          (cd ~/.nvm && git checkout `git describe --abbrev=0 --tags`)
-          source ~/.nvm/nvm.sh
-          nvm install 6.6.0
       - name: Install dependencies
         run: |
           pip install -U pip setuptools wheel codecov
