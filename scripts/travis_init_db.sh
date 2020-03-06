@@ -13,4 +13,4 @@ psql -U postgres ooni_measurements -c "CREATE ROLE readonly;"
 
 echo "Creating database tables using SQL files:"
 ls pipeline/af/oometa/*.install.sql
-cat pipeline/af/oometa/*.install.sql | psql -U postgres ooni_measurements -v ON_ERROR_STOP=1
+PGHOST=localhost cat pipeline/af/oometa/*.install.sql | psql -U postgres ooni_measurements -v ON_ERROR_STOP=1
