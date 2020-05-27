@@ -825,6 +825,8 @@ def get_aggregated(
         dimension_cnt += 1
         cols.append(column(axis_y))
         if axis_y == "category_code":
+            if axis_x == "category_code":
+                return jsonify({"v": 1, "error": "category_code specified twice"})
             # Join in citizenlab table
             table = table.join(
                 sql.table("citizenlab"), sql.text("citizenlab.url = counters.input"),
@@ -863,4 +865,4 @@ def get_aggregated(
         return response
 
     except Exception as e:
-        return jsonify({"v": 0, "error": str(e)})
+        return jsonify({"v": 1, "error": str(e)})
