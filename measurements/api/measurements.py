@@ -1,4 +1,3 @@
-
 from csv import DictWriter
 from datetime import datetime, timedelta
 from dateutil.parser import parse as parse_date
@@ -753,11 +752,11 @@ def get_aggregated(
     format="JSON",
 ):
     """Aggregate counters data
+    Published at https://api.ooni.io/api/v1/aggregation
     """
-    log = current_app.logger
+    dimension_cnt = 0  # can be 0, 1 or 2 depending on axis_x and axis_y
 
-    dimension_cnt = int(bool(axis_x)) + int(bool(axis_y))
-
+    # Cache queries that only access past data that is not likely to change
     cacheable = until and parse_date(until) < datetime.now() - timedelta(hours=72)
 
     # Assemble query
@@ -811,8 +810,10 @@ def get_aggregated(
         where.append(sql.text("measurement_start_day <= :until"))
         query_params["until"] = until
 
+    # The column names set in axis_x and axis_y are validated in
+    # measurements/openapi/measurements.yml
     if axis_x:
-        # TODO: check if the value is a valid colum name
+        dimension_cnt += 1
         cols.append(column(axis_x))
         if axis_x == "category_code":
             # Join in citizenlab table
@@ -821,7 +822,7 @@ def get_aggregated(
             )
 
     if axis_y:
-        # TODO: check if the value is a valid colum name
+        dimension_cnt += 1
         cols.append(column(axis_y))
         if axis_y == "category_code":
             # Join in citizenlab table
@@ -843,10 +844,7 @@ def get_aggregated(
     try:
         q = current_app.db_session.execute(query, query_params)
 
-        if dimension_cnt == 2:
-            r = [dict(row) for row in q]
-
-        elif axis_x or axis_y:
+        if dimension_cnt > 0:
             r = [dict(row) for row in q]
 
         else:
@@ -855,7 +853,11 @@ def get_aggregated(
         if format == "CSV":
             return _convert_to_csv(r)
 
-        response = jsonify({"v": 0, "dimension_count": dimension_cnt, "result": r})
+        # v: format version
+        resp = dict(
+            axis_x=axis_x, axis_y=axis_y, dimension_count=dimension_cnt, result=r, v=1,
+        )
+        response = jsonify(resp)
         if cacheable:
             response.cache_control.max_age = 3600 * 24
         return response
