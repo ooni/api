@@ -353,12 +353,26 @@ paths:
           type: string
           description: |
             The dimension on the x axis e.g. measurement_start_day
+          enum:
+          - category_code
+          - input
+          - measurement_start_day
+          - probe_asn
+          - probe_cc
+          - test_name
 
         - name: axis_y
           in: query
           type: string
           description: |
             The dimension on the y axis e.g. probe_cc
+          enum:
+          - category_code
+          - input
+          - measurement_start_day
+          - probe_asn
+          - probe_cc
+          - test_name
 
         - name: format
           in: query
