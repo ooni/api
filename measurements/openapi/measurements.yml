@@ -189,9 +189,13 @@ paths:
           type: string
           minLength: 3 # `input` is handled by pg_trgm
           description: The input (for example a URL or IP address) to search measurements for
+        - name: full
+          in: query
+          type: boolean
+          description: Include JSON measurement data if available
       responses:
         '200':
-          description: Returns the list of measurement IDs for the specified criteria
+          description: Returns a measurement, optionally including the JSON data
           schema:
             $ref: "#/definitions/MeasurementList"
         default:

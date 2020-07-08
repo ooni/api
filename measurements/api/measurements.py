@@ -144,7 +144,8 @@ def list_files(
                 "test_start_time": row.test_start_time,
             }
         )
-    # We got less results than what we expected, we know the count and that we are done
+    # We got less results than what we expected, we know the count and that we
+    # are done
     if len(results) < limit:
         count = offset + len(results)
         pages = math.ceil(count / limit)
@@ -203,6 +204,37 @@ def get_one_fastpath_measurement(measurement_id, download):
         raise BadRequest("No measurement found")
 
 
+def _fetch_measurement_body(
+    autoclaved_fn: str, frame_off: int, frame_size: int, intra_off: int, intra_size: int
+) -> bytes:
+    """
+    """
+    # Usual size of LZ4 frames is 256kb of decompressed text.
+    # Largest size of LZ4 frame was ~55Mb compressed and ~56Mb decompressed.
+    # :-/
+    range_header = "bytes={}-{}".format(frame_off, frame_off + frame_size - 1)
+    r = requests.get(
+        urljoin(current_app.config["AUTOCLAVED_BASE_URL"], autoclaved_fn),
+        headers={"Range": range_header, REQID_HDR: request_id()},
+    )
+    r.raise_for_status()
+    blob = r.content
+    if len(blob) != frame_size:
+        raise RuntimeError("Failed to fetch LZ4 frame", len(blob), frame_size)
+
+    blob = lz4framed.decompress(blob)[intra_off : intra_off + intra_size]
+    if len(blob) != intra_size or blob[:1] != b"{" or blob[-1:] != b"}":
+        raise RuntimeError(
+            "Failed to decompress LZ4 frame to measurement.json",
+            len(blob),
+            intra_size,
+            blob[:1],
+            blob[-1:],
+        )
+
+    return blob
+
+
 def get_measurement(measurement_id, download=None):
     """Get one measurement by measurement_id,
     fetching the file from S3 or the fastpath host as needed
@@ -250,37 +282,23 @@ def get_measurement(measurement_id, download=None):
     if msmt is None:
         abort(404)
 
-    # Usual size of LZ4 frames is 256kb of decompressed text.
-    # Largest size of LZ4 frame was ~55Mb compressed and ~56Mb decompressed. :-/
-    range_header = "bytes={}-{}".format(
-        msmt.frame_off, msmt.frame_off + msmt.frame_size - 1
+    blob = _fetch_measurement_body(
+        msmt["autoclaved.filename"],
+        msmt.frame_off,
+        msmt.frame_size,
+        msmt.intra_off,
+        msmt.intra_size,
     )
-    filename = msmt["autoclaved.filename"]
-    r = requests.get(
-        urljoin(current_app.config["AUTOCLAVED_BASE_URL"], filename),
-        headers={"Range": range_header, REQID_HDR: request_id()},
-    )
-    r.raise_for_status()
-    blob = r.content
-    if len(blob) != msmt.frame_size:
-        raise RuntimeError("Failed to fetch LZ4 frame", len(blob), msmt.frame_size)
-    blob = lz4framed.decompress(blob)[msmt.intra_off : msmt.intra_off + msmt.intra_size]
-    if len(blob) != msmt.intra_size or blob[:1] != b"{" or blob[-1:] != b"}":
-        raise RuntimeError(
-            "Failed to decompress LZ4 frame to measurement.json",
-            len(blob),
-            msmt.intra_size,
-            blob[:1],
-            blob[-1:],
-        )
+
     # There is no replacement of `measurement_id` with `msm_no` or anything
     # else to keep sanity. Maybe it'll happen as part of orchestration update.
     # Also, blob is not decoded intentionally to save CPU
-    filename = "ooni-msmt-{}-{}".format(measurement_id, msmt.textname.replace("/", "-"))
     response = make_response(blob)
     response.headers.set("Content-Type", "application/json")
     if download is not None:
-        response.headers.set("Content-Disposition", "attachment", filename=filename)
+        fn = "ooni-msmt-{}-{}".format(measurement_id, msmt.textname.replace("/", "-"))
+        response.headers.set("Content-Disposition", "attachment", filename=fn)
+
     return response
 
 
@@ -299,16 +317,11 @@ def _merge_results(tmpresults):
 def get_measurement_meta(report_id=None, input=None, full=False):
     """Get metadata on one measurement by measurement_id + input
     """
-    # TODO FIXME return network_name, analysis and msmt URL or JSON data
-    # TODO add to fastpath:
-    #  annotations->engine_version
-    #  annotations->engine_type
-    #  software_name
-    #  software_version
+    log = current_app.logger
     if report_id is None or report_id == "":
         raise BadRequest("Invalid report_id")
 
-    ## Create measurement+report colums for SQL query
+    # Create measurement+report colums for SQL query
     mrcols = [
         literal_column("report.test_start_time").label("test_start_time"),
         literal_column("measurement.measurement_start_time").label(
@@ -332,11 +345,19 @@ def get_measurement_meta(report_id=None, input=None, full=False):
         literal_column("citizenlab.category_code").label("category_code"),
         literal_column("software.software_name").label("software_name"),
         literal_column("software.software_version").label("software_version"),
+        literal_column("frame_off"),
+        literal_column("frame_size"),
+        literal_column("intra_off"),
+        literal_column("intra_size"),
+        literal_column("textname"),
+        literal_column("report.autoclaved_no").label("autoclaved_no"),
+        literal_column("autoclaved.filename").label("autoclaved_fn"),
     ]
 
-    ## Create fastpath columns for query
+    # Create fastpath columns for query
     fpcols = [
-        # We use test_start_time here as the batch pipeline has many NULL measurement_start_times
+        # We use test_start_time here as the batch pipeline has many NULL
+        # measurement_start_times
         literal_column("measurement_start_time").label("test_start_time"),
         literal_column("measurement_start_time").label("measurement_start_time"),
         func.concat(FASTPATH_MSM_ID_PREFIX, sql.text("tid")).label("measurement_id"),
@@ -353,6 +374,12 @@ def get_measurement_meta(report_id=None, input=None, full=False):
         literal_column("citizenlab.category_code").label("category_code"),
         sql.text("null::text AS software_name"),
         sql.text("null::text AS software_version"),
+        sql.text("null::int AS frame_off"),
+        sql.text("null::int AS frame_size"),
+        sql.text("null::int AS intra_off"),
+        sql.text("null::int AS intra_size"),
+        sql.text("null::text AS textname"),
+        sql.text("null::text AS autoclaved_fn"),
     ]
     mrwhere = []
     fpwhere = []
@@ -373,6 +400,10 @@ def get_measurement_meta(report_id=None, input=None, full=False):
         mr_table.join(
             sql.table("domain_input"),
             sql.text("domain_input.input_no = measurement.input_no"),
+        )
+        .join(
+            sql.table("autoclaved"),
+            sql.text("autoclaved.autoclaved_no = report.autoclaved_no"),
         )
         .join(
             sql.table("software"),
@@ -425,6 +456,12 @@ def get_measurement_meta(report_id=None, input=None, full=False):
         coal("category_code"),
         coal("software_name"),
         coal("software_version"),
+        coal("frame_off"),
+        coal("frame_size"),
+        coal("intra_off"),
+        coal("intra_size"),
+        coal("textname"),
+        coal("autoclaved_fn"),
     ]
     j = fp_query.join(
         mr_query,
@@ -434,14 +471,38 @@ def get_measurement_meta(report_id=None, input=None, full=False):
     query = select(merger).select_from(j)
 
     with sentry.configure_scope() as scope:
-        # Set query (without params) in Sentry scope for the rest of the API call
+        # Set query (without params) in Sentry scope for the whole API call
         # https://github.com/getsentry/sentry-python/issues/184
         scope.set_extra("sql_query", query)
 
     q = current_app.db_session.execute(query, query_params)
     # For each report_id / input tuple, we want at most one entry.
-    x = q.fetchone()
-    return dict(x)
+    resp = dict(q.fetchone())
+
+    if full and resp["autoclaved_fn"]:
+        blob = _fetch_measurement_body(
+            resp["autoclaved_fn"],
+            resp["frame_off"],
+            resp["frame_size"],
+            resp["intra_off"],
+            resp["intra_size"],
+        )
+        resp["data"] = json.loads(blob)
+        try:
+            resp["engine_name"] = resp["data"]["annotations"]["engine_name"]
+            resp["engine_version"] = resp["data"]["annotations"]["engine_version"]
+        except:
+            log.info("Unable to set engine_name/engine_version", exc_info=True)
+            pass
+
+    resp.pop("autoclaved_fn")
+    resp.pop("frame_off")
+    resp.pop("frame_size")
+    resp.pop("intra_off")
+    resp.pop("intra_size")
+    resp.pop("textname")
+
+    return resp
 
 
 def list_measurements(
@@ -468,7 +529,7 @@ def list_measurements(
 
     log = current_app.logger
 
-    ## Workaround for https://github.com/ooni/probe/issues/1034
+    # Workaround for https://github.com/ooni/probe/issues/1034
     user_agent = request.headers.get("User-Agent")
     if user_agent.startswith("okhttp"):
         bug_probe1034_response = jsonify(
@@ -487,7 +548,7 @@ def list_measurements(
         )
         return bug_probe1034_response
 
-    ## Prepare query parameters
+    # Prepare query parameters
 
     input_ = request.args.get("input")
     domain = request.args.get("domain")
@@ -534,7 +595,7 @@ def list_measurements(
 
     INULL = ""  # Special value for input = NULL to merge rows with FULL OUTER JOIN
 
-    ## Create measurement+report colums for SQL query
+    # Create measurement+report colums for SQL query
     cols = [
         # sql.text("measurement.input_no"),
         literal_column("report.test_start_time").label("test_start_time"),
@@ -559,10 +620,11 @@ def list_measurements(
         func.coalesce(sql.text("domain_input.input"), INULL).label("input"),
     ]
 
-    ## Create fastpath columns for query
+    # Create fastpath columns for query
     fpcols = [
         # func.coalesce(0).label("m_input_no"),
-        # We use test_start_time here as the batch pipeline has many NULL measurement_start_times
+        # We use test_start_time here as the batch pipeline has many NULL
+        # measurement_start_times
         literal_column("measurement_start_time").label("test_start_time"),
         literal_column("measurement_start_time").label("measurement_start_time"),
         func.concat(FASTPATH_MSM_ID_PREFIX, sql.text("tid")).label("measurement_id"),
@@ -829,7 +891,8 @@ def list_measurements(
     count = -1
     current_page = math.ceil(offset / limit) + 1
 
-    # We got less results than what we expected, we know the count and that we are done
+    # We got less results than what we expected, we know the count and that we
+    # are done
     if len(results) < limit:
         count = offset + len(results)
         pages = math.ceil(count / limit)

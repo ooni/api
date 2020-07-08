@@ -395,9 +395,39 @@ def test_get_measurement_meta_basic(client):
         "software_version": "2.2.0"
         # "analysis": {"blocking": "http-diff",},
         # "network_name": "Fidget Unlimited",
-        # url to fetch raw measurement
-        # mk version
     }
+
+
+def test_get_measurement_meta_full(client):
+    rid = "20200209T235610Z_AS22773_NqZSA7xdrVbZb6yO25E5a7HM2Zr7ENIwvxEC18a4TpfYOzWxOz"
+    inp = "http://www.theonion.com/"
+    response = api(client, f"measurement_meta?report_id={rid}&input={inp}&full=True")
+    data = response.pop("data")
+    assert response == {
+        "anomaly": False,
+        "confirmed": False,
+        "failure": False,
+        "fp_measurement_id": None,
+        "input": inp,
+        "measurement_id": "temp-id-381224597",
+        "measurement_start_time": "2020-02-09T23:57:26Z",
+        "mr_measurement_id": "temp-id-381224597",
+        "probe_asn": 22773,
+        "probe_cc": "US",
+        "report_id": rid,
+        "scores": "{}",
+        "test_name": "web_connectivity",
+        "test_start_time": "2020-02-09T23:56:06Z",
+        "platform": None,
+        "category_code": "CULTR",
+        "software_name": "ooniprobe-android",
+        "software_version": "2.2.0",
+        "engine_name": "libmeasurement_kit",
+        "engine_version": "0.10.6",
+        # "analysis": {"blocking": "http-diff",},
+        # "network_name": "Fidget Unlimited",
+    }
+    assert "test_keys" in data
 
 
 def test_get_measurement_meta_not_in_fp(client, nonfastpath_rid_input):
