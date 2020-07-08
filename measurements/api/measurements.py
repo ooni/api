@@ -1,4 +1,3 @@
-
 from csv import DictWriter
 from datetime import datetime, timedelta
 from dateutil.parser import parse as parse_date
@@ -297,10 +296,15 @@ def _merge_results(tmpresults):
     return tuple(resultsmap.values())
 
 
-def get_measurement_meta(report_id=None, input=None):
+def get_measurement_meta(report_id=None, input=None, full=False):
     """Get metadata on one measurement by measurement_id + input
     """
-    # TODO FIXME return category code, network_name and analysis
+    # TODO FIXME return network_name, analysis and msmt URL or JSON data
+    # TODO add to fastpath:
+    #  annotations->engine_version
+    #  annotations->engine_type
+    #  software_name
+    #  software_version
     if report_id is None or report_id == "":
         raise BadRequest("Invalid report_id")
 
@@ -324,6 +328,10 @@ def get_measurement_meta(report_id=None, input=None):
         literal_column("report.probe_asn").label("probe_asn"),
         literal_column("report.test_name").label("test_name"),
         literal_column("domain_input.input").label("input"),
+        sql.text("null::text AS platform"),
+        literal_column("citizenlab.category_code").label("category_code"),
+        literal_column("software.software_name").label("software_name"),
+        literal_column("software.software_version").label("software_version"),
     ]
 
     ## Create fastpath columns for query
@@ -339,8 +347,12 @@ def get_measurement_meta(report_id=None, input=None):
         literal_column("report_id"),
         literal_column("probe_cc"),
         literal_column("probe_asn"),
-        literal_column("test_name"),
+        literal_column("fastpath.test_name"),
         literal_column("fastpath.input").label("input"),
+        literal_column("platform"),
+        literal_column("citizenlab.category_code").label("category_code"),
+        sql.text("null::text AS software_name"),
+        sql.text("null::text AS software_version"),
     ]
     mrwhere = []
     fpwhere = []
@@ -357,12 +369,28 @@ def get_measurement_meta(report_id=None, input=None):
     )
     fpq_table = sql.table("fastpath")
 
-    mr_table = mr_table.join(
-        sql.table("domain_input"),
-        sql.text("domain_input.input_no = measurement.input_no"),
+    mr_table = (
+        mr_table.join(
+            sql.table("domain_input"),
+            sql.text("domain_input.input_no = measurement.input_no"),
+        )
+        .join(
+            sql.table("software"),
+            sql.text("report.software_no = software.software_no"),
+        )
+        .join(
+            sql.table("citizenlab"),
+            sql.text("citizenlab.url = domain_input.input"),
+            isouter=True,
+        )
     )
+
     fpq_table = fpq_table.join(
         sql.table("domain_input"), sql.text("domain_input.input = fastpath.input")
+    ).join(
+        sql.table("citizenlab"),
+        sql.text("citizenlab.url = fastpath.input"),
+        isouter=True,
     )
 
     query_params["input"] = input
@@ -393,6 +421,10 @@ def get_measurement_meta(report_id=None, input=None):
         coal("probe_asn"),
         coal("test_name"),
         coal("input"),
+        coal("platform"),
+        coal("category_code"),
+        coal("software_name"),
+        coal("software_version"),
     ]
     j = fp_query.join(
         mr_query,

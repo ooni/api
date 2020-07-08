@@ -389,10 +389,16 @@ def test_get_measurement_meta_basic(client):
         "scores": "{}",
         "test_name": "web_connectivity",
         "test_start_time": "2020-02-09T23:56:06Z",
+        "platform": None,
+        "category_code": "CULTR",
+        "software_name": "ooniprobe-android",
+        "software_version": "2.2.0"
         # "analysis": {"blocking": "http-diff",},
-        # "category_code": "SOCIAL",
         # "network_name": "Fidget Unlimited",
+        # url to fetch raw measurement
+        # mk version
     }
+
 
 def test_get_measurement_meta_not_in_fp(client, nonfastpath_rid_input):
     rid, inp = nonfastpath_rid_input
