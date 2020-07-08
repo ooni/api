@@ -301,7 +301,9 @@ def get_measurement_meta(report_id=None, input=None):
     """Get metadata on one measurement by measurement_id + input
     """
     # TODO FIXME return category code, network_name and analysis
-    log = current_app.logger
+    if report_id is None or report_id == "":
+        raise BadRequest("Invalid report_id")
+
     ## Create measurement+report colums for SQL query
     mrcols = [
         literal_column("report.test_start_time").label("test_start_time"),
@@ -405,6 +407,7 @@ def get_measurement_meta(report_id=None, input=None):
         scope.set_extra("sql_query", query)
 
     q = current_app.db_session.execute(query, query_params)
+    # For each report_id / input tuple, we want at most one entry.
     x = q.fetchone()
     return dict(x)
 

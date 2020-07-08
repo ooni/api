@@ -131,6 +131,11 @@ def nonfastpath_rid_input(app):
     FROM measurement
     JOIN report ON report.report_no = measurement.report_no
     JOIN input ON input.input_no = measurement.input_no
+    AND NOT EXISTS (
+        SELECT
+        FROM fastpath
+        WHERE report.report_id = fastpath.report_id
+    )
     LIMIT 1
     """
     return dbquery(app, sql)[0:3]
@@ -365,7 +370,7 @@ def test_list_files_range_cc_asn(client):
 # # get_measurement_meta # #
 
 
-def test_get_measurement_meta(client):
+def test_get_measurement_meta_basic(client):
     rid = "20200209T235610Z_AS22773_NqZSA7xdrVbZb6yO25E5a7HM2Zr7ENIwvxEC18a4TpfYOzWxOz"
     inp = "http://www.theonion.com/"
     response = api(client, f"measurement_meta?report_id={rid}&input={inp}")
@@ -389,7 +394,6 @@ def test_get_measurement_meta(client):
         # "network_name": "Fidget Unlimited",
     }
 
-
 def test_get_measurement_meta_not_in_fp(client, nonfastpath_rid_input):
     rid, inp = nonfastpath_rid_input
     response = api(client, f"measurement_meta?report_id={rid}&input={inp}")
@@ -398,19 +402,18 @@ def test_get_measurement_meta_not_in_fp(client, nonfastpath_rid_input):
 
 
 def test_get_measurement_meta_only_in_fp(client, fastpath_rid_input):
-    rid, inp = fastpath_rid_input
+    rid, inp, test_start_time = fastpath_rid_input
     response = api(client, f"measurement_meta?report_id={rid}&input={inp}")
     assert response["input"] == inp
     assert response["scores"] != "{}"  # from fastpath
-
 
 def test_get_measurement_meta_shared(client, shared_rid_input):
-    rid, inp = shared_rid_input
+    rid, inp, test_start_time = shared_rid_input
     response = api(client, f"measurement_meta?report_id={rid}&input={inp}")
     assert response["input"] == inp
     assert response["scores"] != "{}"  # from fastpath
 
-
+@pytest.mark.skip(reason="This is too slow")
 def test_get_measurement_meta_duplicate_in_fp(client, fastpath_dup_rid_input):
     rid, inp = fastpath_dup_rid_input
     response = api(client, f"measurement_meta?report_id={rid}&input={inp}")
