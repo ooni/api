@@ -170,13 +170,10 @@ def list_files(
     return jsonify({"metadata": metadata, "results": results})
 
 
-def get_one_fastpath_measurement(measurement_id, download):
-    """Get one measurement from the fastpath table by measurement_id,
-    fetching the file from the fastpath host
-    """
+def _fetch_measurement_body_from_fastpath(measurement_id: str) -> bytes:
+    """Fetch measurement body from fastpath host"""
     log = current_app.logger
-    tid = measurement_id[len(FASTPATH_MSM_ID_PREFIX) :]
-
+    tid = measurement_id[len(FASTPATH_MSM_ID_PREFIX):]
     path = "/measurements/{}.json.lz4".format(tid)
     log.info(
         "Incoming fastpath query %r. Fetching %s:%d%s",
@@ -185,23 +182,38 @@ def get_one_fastpath_measurement(measurement_id, download):
         FASTPATH_PORT,
         path,
     )
-    conn = http.client.HTTPConnection(FASTPATH_SERVER, FASTPATH_PORT)
-    log.debug("Fetching %s:%d %r", FASTPATH_SERVER, FASTPATH_PORT, path)
-    conn.request("GET", path)
-    r = conn.getresponse()
-    log.debug("Response status: %d", r.status)
     try:
+        conn = http.client.HTTPConnection(FASTPATH_SERVER, FASTPATH_PORT)
+        log.debug("Fetching %s:%d %r", FASTPATH_SERVER, FASTPATH_PORT, path)
+        conn.request("GET", path)
+        r = conn.getresponse()
+        log.debug("Response status: %d", r.status)
         assert r.status == 200
         blob = r.read()
         conn.close()
         log.debug("Decompressing LZ4 data")
         blob = lz4framed.decompress(blob)
+        return blob
+
+    except Exception:
+        raise BadRequest("No measurement found")
+
+
+def get_one_fastpath_measurement(measurement_id, download):
+    """Get one measurement from the fastpath table by measurement_id,
+    fetching the file from the fastpath host
+    """
+    log = current_app.logger
+    try:
+        blob = _fetch_measurement_body_from_fastpath(measurement_id)
         response = make_response(blob)
         response.headers.set("Content-Type", "application/json")
         log.debug("Sending JSON response")
         return response
+
     except Exception:
         raise BadRequest("No measurement found")
+
 
 
 def _fetch_measurement_body(
@@ -388,9 +400,6 @@ def get_measurement_meta(report_id=None, input=None, full=False):
     mrwhere.append(sql.text("report.report_id = :report_id"))
     fpwhere.append(sql.text("report_id = :report_id"))
 
-    # mrwhere.append(sql.text("report.input = :input"))
-    # fpwhere.append(sql.text("input = :input"))
-
     mr_table = sql.table("measurement").join(
         sql.table("report"), sql.text("measurement.report_no = report.report_no"),
     )
@@ -479,14 +488,20 @@ def get_measurement_meta(report_id=None, input=None, full=False):
     # For each report_id / input tuple, we want at most one entry.
     resp = dict(q.fetchone())
 
-    if full and resp["autoclaved_fn"]:
-        blob = _fetch_measurement_body(
-            resp["autoclaved_fn"],
-            resp["frame_off"],
-            resp["frame_size"],
-            resp["intra_off"],
-            resp["intra_size"],
-        )
+    if full:
+        if resp["autoclaved_fn"]:
+            # Fetch msmt body from S3
+            blob = _fetch_measurement_body(
+                resp["autoclaved_fn"],
+                resp["frame_off"],
+                resp["frame_size"],
+                resp["intra_off"],
+                resp["intra_size"],
+            )
+        else:
+            msm_id = resp["measurement_id"]
+            blob = _fetch_measurement_body_from_fastpath(msm_id)
+
         resp["data"] = json.loads(blob)
         try:
             resp["engine_name"] = resp["data"]["annotations"]["engine_name"]

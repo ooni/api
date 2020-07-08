@@ -437,11 +437,30 @@ def test_get_measurement_meta_not_in_fp(client, nonfastpath_rid_input):
     assert response["scores"] == "{}"  # empty: not from fastpath
 
 
-def test_get_measurement_meta_only_in_fp(client, fastpath_rid_input):
+def test_get_measurement_meta_only_in_fp_meta(client, fastpath_rid_input):
     rid, inp, test_start_time = fastpath_rid_input
     response = api(client, f"measurement_meta?report_id={rid}&input={inp}")
     assert response["input"] == inp
     assert response["scores"] != "{}"  # from fastpath
+    assert "software_name" in response
+    assert "software_version" in response
+    assert "category_code" in response
+
+    assert "data" not in response
+    assert "engine_name" not in response
+    assert "engine_version" not in response
+
+def test_get_measurement_meta_only_in_fp_full(client, fastpath_rid_input):
+    rid, inp, test_start_time = fastpath_rid_input
+    response = api(client, f"measurement_meta?report_id={rid}&input={inp}&full=True")
+    assert response["input"] == inp
+    assert response["scores"] != "{}"  # from fastpath
+    assert "category_code" in response
+    assert "data" in response
+    assert "engine_name" in response
+    assert "engine_version" in response
+    assert "software_name" in response
+    assert "software_version" in response
 
 def test_get_measurement_meta_shared(client, shared_rid_input):
     rid, inp, test_start_time = shared_rid_input
