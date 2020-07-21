@@ -173,7 +173,7 @@ def list_files(
 def _fetch_measurement_body_from_fastpath(measurement_id: str) -> bytes:
     """Fetch measurement body from fastpath host"""
     log = current_app.logger
-    tid = measurement_id[len(FASTPATH_MSM_ID_PREFIX):]
+    tid = measurement_id[len(FASTPATH_MSM_ID_PREFIX) :]
     path = "/measurements/{}.json.lz4".format(tid)
     log.info(
         "Incoming fastpath query %r. Fetching %s:%d%s",
@@ -213,7 +213,6 @@ def get_one_fastpath_measurement(measurement_id, download):
 
     except Exception:
         raise BadRequest("No measurement found")
-
 
 
 def _fetch_measurement_body(
@@ -352,9 +351,7 @@ def get_measurement_meta(report_id=None, input=None, full=False):
         literal_column("report.probe_cc").label("probe_cc"),
         literal_column("report.probe_asn").label("probe_asn"),
         literal_column("report.test_name").label("test_name"),
-        literal_column("domain_input.input").label("input"),
         sql.text("null::text AS platform"),
-        literal_column("citizenlab.category_code").label("category_code"),
         literal_column("software.software_name").label("software_name"),
         literal_column("software.software_version").label("software_version"),
         literal_column("frame_off"),
@@ -365,6 +362,17 @@ def get_measurement_meta(report_id=None, input=None, full=False):
         literal_column("report.autoclaved_no").label("autoclaved_no"),
         literal_column("autoclaved.filename").label("autoclaved_fn"),
     ]
+    if input is None:
+        mrcols.extend(
+            [sql.text("null::text AS input"), sql.text("null::text AS category_code")]
+        )
+    else:
+        mrcols.extend(
+            [
+                literal_column("domain_input.input").label("input"),
+                literal_column("citizenlab.category_code").label("category_code"),
+            ]
+        )
 
     # Create fastpath columns for query
     fpcols = [
@@ -383,7 +391,6 @@ def get_measurement_meta(report_id=None, input=None, full=False):
         literal_column("fastpath.test_name"),
         literal_column("fastpath.input").label("input"),
         literal_column("platform"),
-        literal_column("citizenlab.category_code").label("category_code"),
         sql.text("null::text AS software_name"),
         sql.text("null::text AS software_version"),
         sql.text("null::int AS frame_off"),
@@ -393,6 +400,11 @@ def get_measurement_meta(report_id=None, input=None, full=False):
         sql.text("null::text AS textname"),
         sql.text("null::text AS autoclaved_fn"),
     ]
+    if input is None:
+        fpcols.append(sql.text("null::text AS category_code"))
+    else:
+        fpcols.append(literal_column("citizenlab.category_code").label("category_code"))
+
     mrwhere = []
     fpwhere = []
     query_params = {}
@@ -405,37 +417,39 @@ def get_measurement_meta(report_id=None, input=None, full=False):
     )
     fpq_table = sql.table("fastpath")
 
-    mr_table = (
-        mr_table.join(
+    mr_table = mr_table.join(
+        sql.table("autoclaved"),
+        sql.text("autoclaved.autoclaved_no = report.autoclaved_no"),
+    ).join(
+        sql.table("software"), sql.text("report.software_no = software.software_no"),
+    )
+
+    if input is None:
+        mrwhere.append(sql.text("measurement.input_no IS NULL"))
+        fpwhere.append(sql.text("fastpath.input IS NULL"))
+
+    else:
+        # JOIN in domain_input and citizenlab on the value "input"
+        mr_table = mr_table.join(
             sql.table("domain_input"),
             sql.text("domain_input.input_no = measurement.input_no"),
-        )
-        .join(
-            sql.table("autoclaved"),
-            sql.text("autoclaved.autoclaved_no = report.autoclaved_no"),
-        )
-        .join(
-            sql.table("software"),
-            sql.text("report.software_no = software.software_no"),
-        )
-        .join(
+        ).join(
             sql.table("citizenlab"),
             sql.text("citizenlab.url = domain_input.input"),
             isouter=True,
         )
-    )
 
-    fpq_table = fpq_table.join(
-        sql.table("domain_input"), sql.text("domain_input.input = fastpath.input")
-    ).join(
-        sql.table("citizenlab"),
-        sql.text("citizenlab.url = fastpath.input"),
-        isouter=True,
-    )
+        fpq_table = fpq_table.join(
+            sql.table("domain_input"), sql.text("domain_input.input = fastpath.input")
+        ).join(
+            sql.table("citizenlab"),
+            sql.text("citizenlab.url = fastpath.input"),
+            isouter=True,
+        )
 
-    query_params["input"] = input
-    mrwhere.append(sql.text("domain_input.input = :input"))
-    fpwhere.append(sql.text("domain_input.input = :input"))
+        query_params["input"] = input
+        mrwhere.append(sql.text("domain_input.input = :input"))
+        fpwhere.append(sql.text("domain_input.input = :input"))
 
     # Assemble queries
     mr_query = (select(mrcols).where(and_(*mrwhere)).select_from(mr_table)).alias("mr")
@@ -486,7 +500,11 @@ def get_measurement_meta(report_id=None, input=None, full=False):
 
     q = current_app.db_session.execute(query, query_params)
     # For each report_id / input tuple, we want at most one entry.
-    resp = dict(q.fetchone())
+    resp = q.fetchone()
+    if resp is None:
+        abort(404)
+
+    resp = dict(resp)
 
     if full:
         if resp["autoclaved_fn"]:

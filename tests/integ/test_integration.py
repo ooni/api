@@ -398,6 +398,37 @@ def test_get_measurement_meta_basic(client):
     }
 
 
+def test_get_measurement_meta_not_found(client):
+    response = client.get(f"/api/v1/measurement_meta?report_id=BOGUS")
+    assert response.status_code == 404
+
+
+def test_get_measurement_meta_input_none_from_fp(client):
+    rid = "20200712T143743Z_AS27775_17Eq6sYKWBS2S0hdzXf7rhUusKfYP5cQM9HwAdZRPmUfroVoCn"
+    # input is None
+    response = api(client, f"measurement_meta?report_id={rid}")
+    assert response == {
+        "anomaly": False,
+        "category_code": None,
+        "confirmed": False,
+        "failure": False,
+        "fp_measurement_id": "temp-fid-00ae35a61dadc20e014d9d544525b823",
+        "input": None,
+        "measurement_id": "temp-fid-00ae35a61dadc20e014d9d544525b823",
+        "measurement_start_time": "2020-07-20T19:36:23Z",
+        "mr_measurement_id": None,
+        "platform": "android",
+        "probe_asn": 27775,
+        "probe_cc": "SR",
+        "report_id": rid,
+        "scores": "{}",
+        "software_name": None,
+        "software_version": None,
+        "test_name": "ndt",
+        "test_start_time": "2020-07-20 19:35:55",
+    }
+
+
 def test_get_measurement_meta_full(client):
     rid = "20200209T235610Z_AS22773_NqZSA7xdrVbZb6yO25E5a7HM2Zr7ENIwvxEC18a4TpfYOzWxOz"
     inp = "http://www.theonion.com/"
@@ -450,6 +481,7 @@ def test_get_measurement_meta_only_in_fp_meta(client, fastpath_rid_input):
     assert "engine_name" not in response
     assert "engine_version" not in response
 
+
 def test_get_measurement_meta_only_in_fp_full(client, fastpath_rid_input):
     rid, inp, test_start_time = fastpath_rid_input
     response = api(client, f"measurement_meta?report_id={rid}&input={inp}&full=True")
@@ -462,11 +494,13 @@ def test_get_measurement_meta_only_in_fp_full(client, fastpath_rid_input):
     assert "software_name" in response
     assert "software_version" in response
 
+
 def test_get_measurement_meta_shared(client, shared_rid_input):
     rid, inp, test_start_time = shared_rid_input
     response = api(client, f"measurement_meta?report_id={rid}&input={inp}")
     assert response["input"] == inp
     assert response["scores"] != "{}"  # from fastpath
+
 
 @pytest.mark.skip(reason="This is too slow")
 def test_get_measurement_meta_duplicate_in_fp(client, fastpath_dup_rid_input):
