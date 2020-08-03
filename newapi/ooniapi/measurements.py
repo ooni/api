@@ -16,8 +16,6 @@ import time
 import requests
 import lz4framed
 
-import sentry_sdk as sentry
-
 from flask import current_app, request, make_response, abort
 from flask.json import jsonify
 from werkzeug.exceptions import HTTPException, BadRequest
@@ -135,8 +133,8 @@ def list_files():
     since_index = param("since_index")
     order_by = param("order_by", "index")
     order = param("order", "desc")
-    offset = param("offset", 0)
-    limit = param("limit", 100)
+    offset = int(param("offset", 0))
+    limit = int(param("limit", 100))
     log = current_app.logger
 
     if probe_asn is not None:
@@ -702,11 +700,6 @@ def list_measurements():
     # offset
     query = fp_query.offset(offset).limit(limit)
 
-    with sentry.configure_scope() as scope:
-        # Set query (without params) in Sentry scope for the rest of the API call
-        # https://github.com/getsentry/sentry-python/issues/184
-        scope.set_extra("sql_query", query)
-
     # Run the query, generate the results list
     iter_start_time = time.time()
 
@@ -921,8 +914,6 @@ def get_aggregated():
     since = param("since")
     until = param("until")
     format = param("format", "JSON")
-
-    assert probe_cc
 
     dimension_cnt = int(bool(axis_x)) + int(bool(axis_y))
 

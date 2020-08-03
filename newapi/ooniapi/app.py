@@ -13,10 +13,6 @@ from flask import Flask, json
 # from flask_cors import CORS
 from ooniapi.rate_limit_quotas import FlaskLimiter
 
-import sentry_sdk
-from sentry_sdk.integrations.flask import FlaskIntegration
-from sentry_sdk.integrations.logging import ignore_logger
-
 from flasgger import Swagger
 
 from decimal import Decimal
@@ -72,16 +68,6 @@ def init_app(app, testmode=False):
         app.config["DEBUG"] = True
     elif stage not in ("testing", "staging",):  # known envs according to Readme.md
         raise RuntimeError("Unexpected APP_ENV", stage)
-
-    if app.config["APP_ENV"] == "production":
-        sentry_sdk.init(
-            dsn="https://dcb077b34ac140d58a7c37609cea0cf9@sentry.io/1367288",
-            integrations=[FlaskIntegration()],
-        )
-        # TODO Temporary workaround to ignore flask-limiter logs due to:
-        # https://github.com/ooni/api/issues/145 &
-        # https://github.com/alisaifee/flask-limiter/issues/186
-        ignore_logger("flask-limiter")
 
     # md = Misaka(fenced_code=True)
     # md.init_app(app)
