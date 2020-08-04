@@ -46,12 +46,7 @@ class FlaskJSONEncoder(json.JSONEncoder):
 
 
 def init_app(app, testmode=False):
-    # We load configurations first from the config file (where some options
-    # are overridable via environment variables) or from the config file
-    # pointed to by the MEASUREMENTS_CONFIG environment variable.
-    # The later overrides the former.
     app.config.from_object("ooniapi.config")
-    app.config.from_envvar("MEASUREMENTS_CONFIG", silent=True)
 
     # Prevent messy duplicate logs during testing
     if not testmode:
