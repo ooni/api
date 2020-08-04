@@ -29,8 +29,6 @@ from flask import (
     send_file,
 )
 
-from sqlalchemy import sql, select
-from sqlalchemy.sql import literal_column
 from werkzeug.exceptions import BadRequest, NotFound, HTTPException
 
 from ooniapi.config import REQID_HDR, request_id
@@ -53,12 +51,20 @@ def index():
 
 @pages_blueprint.route("/css/bootstrap.min.css")
 def serve_bootstrap_css():
-    return send_file("/usr/share/nodejs/bootstrap/dist/css/bootstrap.min.css")
+    tpl = "/usr/%s/nodejs/bootstrap/dist/css/bootstrap.min.css"
+    try:
+        return send_file(tpl % "lib")
+    except FileNotFoundError:
+        return send_file(tpl % "share")
 
 
 @pages_blueprint.route("/css/bootstrap.min.js")
 def serve_bootstrap():
-    return send_file("/usr/share/nodejs/bootstrap/dist/js/bootstrap.min.js")
+    tpl = "/usr/%s/nodejs/bootstrap/dist/js/bootstrap.min.js"
+    try:
+        return send_file(tpl % "lib")
+    except FileNotFoundError:
+        return send_file(tpl % "share")
 
 
 @pages_blueprint.route("/stats")
