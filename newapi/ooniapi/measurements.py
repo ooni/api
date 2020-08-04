@@ -806,16 +806,6 @@ def _convert_to_csv(r) -> str:
     return result
 
 
-yml = "/usr/lib/python3/dist-packages/ooniapi/openapi/measurements.yml"
-yml = "/home/fede/projects/ooni-api/newapi/ooniapi/openapi/measurements.yml"
-yml = "measurements.yml"
-
-
-# import Flask
-# app = Flask(__name__)
-# swagger = Swagger(app)
-
-
 @api_msm_blueprint.route("/v1/aggregation")
 def get_aggregated():
     """Aggregate counters data
