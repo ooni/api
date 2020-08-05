@@ -10,10 +10,8 @@ from io import StringIO
 import http.client
 import json
 import math
-import re
 import time
 
-import requests
 import lz4framed
 
 from flask import current_app, request, make_response, abort, redirect
@@ -29,7 +27,7 @@ from psycopg2.extensions import QueryCanceledError
 from urllib.parse import urljoin, urlencode
 
 from ooniapi import __version__
-from ooniapi.config import REPORT_INDEX_OFFSET, REQID_HDR, request_id
+from ooniapi.config import REPORT_INDEX_OFFSET
 
 from flask import Blueprint
 
