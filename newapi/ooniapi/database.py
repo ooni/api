@@ -57,7 +57,7 @@ def init_db(app):
         ),
     }
     app.db_engine = create_engine(
-        app.config["DATABASE_URL"], convert_unicode=True, connect_args=connect_args
+        app.config["DATABASE_URI_RO"], convert_unicode=True, connect_args=connect_args
     )
     # if not database_exists(app.db_engine.url):
     #    create_database(app.db_engine.url)

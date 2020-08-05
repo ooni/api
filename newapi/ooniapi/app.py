@@ -46,7 +46,14 @@ class FlaskJSONEncoder(json.JSONEncoder):
 
 
 def init_app(app, testmode=False):
+    # Load configurations defaults from ooniapi/config.py
+    # and then from the file pointed by CONF
+    # (defaults to /etc/ooni/api.conf)
     app.config.from_object("ooniapi.config")
+    conffile = os.getenv("CONF", "/etc/ooni/api.conf")
+    print(f"Loading conf from {conffile}")
+    app.config.from_pyfile(conffile)
+    #, silent=True)
 
     # Prevent messy duplicate logs during testing
     if not testmode:
