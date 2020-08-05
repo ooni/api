@@ -16,7 +16,7 @@ import time
 import requests
 import lz4framed
 
-from flask import current_app, request, make_response, abort
+from flask import current_app, request, make_response, abort, redirect
 from flask.json import jsonify
 from werkzeug.exceptions import HTTPException, BadRequest
 
@@ -47,6 +47,12 @@ class QueryTimeoutError(HTTPException):
 
 def get_version():
     return jsonify({"version": __version__})
+
+
+@api_msm_blueprint.route("/")
+def show_apidocs():
+    """Route to https://api.ooni.io/api/ to /apidocs/"""
+    return redirect("/apidocs")
 
 
 @api_msm_blueprint.route("/v1/files")
@@ -248,7 +254,6 @@ def list_files():
     return jsonify({"metadata": metadata, "results": results})
 
 
-
 @api_msm_blueprint.route("/v1/measurement/<measurement_id>")
 def get_measurement(measurement_id, download=None):
     """Get one measurement by measurement_id,
@@ -301,8 +306,6 @@ def get_measurement(measurement_id, download=None):
         return response
     except Exception:
         raise BadRequest("No measurement found")
-
-
 
 
 def _merge_results(tmpresults):
@@ -638,7 +641,6 @@ def list_measurements():
                 )
                 fpwhere.append(sql.text("citizenlab.category_code = :category_code"))
 
-
     # We runs SELECTs on the measurement-report (mr) tables and faspath independently
     # from each other and then merge them.
     # The FULL OUTER JOIN query is using LIMIT and OFFSET based on the
@@ -676,8 +678,7 @@ def list_measurements():
 
     fp_query = fp_query.order_by(text("{} {}".format(order_by, order)))
 
-
-    #merger = [
+    # merger = [
     #    coal("test_start_time"),
     #    coal("measurement_start_time"),
     #    func.coalesce(
@@ -695,7 +696,7 @@ def list_measurements():
     #    coal("probe_asn"),
     #    coal("test_name"),
     #    coal("input"),
-    #]
+    # ]
     # Assemble the "external" query. Run a final order by followed by limit and
     # offset
     query = fp_query.offset(offset).limit(limit)
