@@ -15,6 +15,8 @@ from flask import Response, current_app, render_template
 from ooniapi.private import api_private_blueprint
 from ooniapi.measurements import api_msm_blueprint
 from ooniapi.pages import pages_blueprint, api_docs_blueprint
+from ooniapi.probe_services import probe_services_blueprint
+from ooniapi.prio import prio_bp
 
 HERE = os.path.abspath(os.path.dirname(__file__))
 
@@ -53,20 +55,24 @@ def bad_request(e):
     return render_template("400.html", exception=e), 400
 
 def register(app):
-   #app.register_blueprint(api_docs_blueprint, url_prefix="/api")
+    #app.register_blueprint(api_docs_blueprint, url_prefix="/api")
 
-   # Measurements API:
-   app.register_blueprint(api_msm_blueprint, url_prefix="/api")
-   #app.register_blueprint(connexion_api.blueprint)
+    # Measurements API:
+    app.register_blueprint(api_msm_blueprint, url_prefix="/api")
+    #app.register_blueprint(connexion_api.blueprint)
 
-   # Private API
-   app.register_blueprint(api_private_blueprint, url_prefix="/api/_")
+    # Private API
+    app.register_blueprint(api_private_blueprint, url_prefix="/api/_")
 
-   # The index is here:
-   app.register_blueprint(pages_blueprint, url_prefix="")
+    # The index is here:
+    app.register_blueprint(pages_blueprint, url_prefix="")
 
-   #app.register_error_handler(ProblemException, render_problem_exception)
-   #app.register_error_handler(Exception, render_generic_exception)
+    # Probe services
+    app.register_blueprint(probe_services_blueprint, url_prefix="")
+    app.register_blueprint(prio_bp, url_prefix="")
 
-   app.errorhandler(404)(page_not_found)
-   app.errorhandler(400)(bad_request)
+    #app.register_error_handler(ProblemException, render_problem_exception)
+    #app.register_error_handler(Exception, render_generic_exception)
+
+    app.errorhandler(404)(page_not_found)
+    app.errorhandler(400)(bad_request)
