@@ -159,7 +159,14 @@ def create_app(*args, testmode=False, **kw):
 
     @app.route("/health")
     def health():
+        """Health check
+        ---
+        responses:
+          '200':
+            description: Status
+        """
         return "UP"
+        # TODO: ping database?
         # option httpchk GET /check
         # http-check expect string success
 
