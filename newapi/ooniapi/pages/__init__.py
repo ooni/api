@@ -46,11 +46,23 @@ DAY_REGEXP = re.compile("^\d{4}\-[0-1]\d\-[0-3]\d$")
 
 @pages_blueprint.route("/")
 def index():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     return render_template("index.html")
 
 
 @pages_blueprint.route("/css/bootstrap.min.css")
 def serve_bootstrap_css():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     tpl = "/usr/%s/nodejs/bootstrap/dist/css/bootstrap.min.css"
     try:
         return send_file(tpl % "lib")
@@ -60,6 +72,12 @@ def serve_bootstrap_css():
 
 @pages_blueprint.route("/css/bootstrap.min.js")
 def serve_bootstrap():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     tpl = "/usr/%s/nodejs/bootstrap/dist/js/bootstrap.min.js"
     try:
         return send_file(tpl % "lib")
@@ -69,21 +87,45 @@ def serve_bootstrap():
 
 @pages_blueprint.route("/stats")
 def stats():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     return redirect("https://explorer.ooni.org", 301)
 
 
 @pages_blueprint.route("/files")
 def files_index():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     return redirect("https://explorer.ooni.org/search", 301)
 
 
 @pages_blueprint.route("/files/by_date")
 def files_by_date():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     return redirect("https://explorer.ooni.org/search", 301)
 
 
 @pages_blueprint.route("/files/by_date/<date>")
 def files_on_date(date):
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     if not DAY_REGEXP.match(date):
         raise BadRequest("Invalid date format")
 
@@ -98,11 +140,23 @@ def files_on_date(date):
 
 @pages_blueprint.route("/files/by_country")
 def files_by_country():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     return redirect("https://explorer.ooni.org/search", 301)
 
 
 @pages_blueprint.route("/files/by_country/<country_code>")
 def files_in_country(country_code):
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     if len(country_code) != 2:
         raise BadRequest("Country code must be two characters")
     country_code = country_code.upper()
@@ -164,6 +218,12 @@ def decompress_autoclaved(
 
 @pages_blueprint.route("/files/download/<path:textname>")
 def files_download(textname):
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     if "/" not in textname:
         # This is for backward compatibility with the new pipeline.
         # See: https://github.com/TheTorProject/ooni-measurements/issues/44
@@ -228,6 +288,12 @@ def files_download(textname):
 # These two are needed to avoid breaking older URLs
 @pages_blueprint.route("/<date>/<report_file>")
 def backward_compatible_download(date, report_file):
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     if DAY_REGEXP.match(date) and report_file.endswith(".json"):
         # XXX maybe do some extra validation on report_file
         return redirect("/files/download/%s" % report_file)
@@ -236,6 +302,12 @@ def backward_compatible_download(date, report_file):
 
 @pages_blueprint.route("/<date>")
 def backward_compatible_by_date(date):
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     if DAY_REGEXP.match(date):
         since = date
         until = (datetime.strptime(date, "%Y-%m-%d") + timedelta(days=1)).strftime(
