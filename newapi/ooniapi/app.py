@@ -1,11 +1,9 @@
 from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
 
 import logging
 import datetime
 import os
+import sys
 
 from flask import Flask, json
 
@@ -14,6 +12,10 @@ from flask import Flask, json
 from ooniapi.rate_limit_quotas import FlaskLimiter
 
 from flasgger import Swagger
+
+from flask_mail import Mail  # debdeps: python3-flask-mail
+
+from flask_security import Security  # debdeps: python3-flask-security
 
 from decimal import Decimal
 from ooniapi.database import init_db
@@ -45,19 +47,49 @@ class FlaskJSONEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, o)
 
 
+def validate_conf(app, conffile):
+    """Fail early if the app configuration looks incorrect
+    """
+    conf_keys = (
+        "AUTOCLAVED_BASE_URL",
+        "BASE_URL",
+        "CENTRIFUGATION_BASE_URL",
+        "COLLECTORS",
+        "DATABASE_STATEMENT_TIMEOUT",
+        "DATABASE_URI_RO",
+        "MAIL_PASSWORD",
+        "MAIL_PORT",
+        "MAIL_SERVER",
+        "MAIL_USERNAME",
+        "MAIL_USE_SSL",
+        "S3_ACCESS_KEY_ID",
+        "S3_ENDPOINT_URL",
+        "S3_SECRET_ACCESS_KEY",
+        "S3_SESSION_TOKEN",
+    )
+    for k in conf_keys:
+        if k not in app.config:
+            log = app.logger
+            log.error(f"Missing configuration key {k} in {conffile}")
+            # exit with 4 to terminate gunicorn
+            sys.exit(4)
+
+
 def init_app(app, testmode=False):
     # Load configurations defaults from ooniapi/config.py
     # and then from the file pointed by CONF
     # (defaults to /etc/ooni/api.conf)
+    log = app.logger
     app.config.from_object("ooniapi.config")
     conffile = os.getenv("CONF", "/etc/ooni/api.conf")
-    print(f"Loading conf from {conffile}")
+    log.info(f"Loading conf from {conffile}")
     app.config.from_pyfile(conffile)
-    #, silent=True)
+    validate_conf(app, conffile)
+    log.info("Configuration loaded")
 
     # Prevent messy duplicate logs during testing
-    if not testmode:
-        app.logger.addHandler(logging.StreamHandler())
+    #if not testmode:
+    #    app.logger.addHandler(logging.StreamHandler())
 
     stage = app.config["APP_ENV"]
     if stage == "production":
@@ -86,6 +118,7 @@ def create_app(*args, testmode=False, **kw):
 
     app = Flask(__name__)
     app.json_encoder = FlaskJSONEncoder
+    log = app.logger
 
     # Order matters
     init_app(app, testmode=testmode)
@@ -112,6 +145,10 @@ def create_app(*args, testmode=False, **kw):
 
     Swagger(app, parse=True)
 
+    mail = Mail(app)
+
+    security = Security(app, app.db_session)
+
     # FIXME
     views.register(app)
 
@@ -125,5 +162,10 @@ def create_app(*args, testmode=False, **kw):
         return "UP"
         # option httpchk GET /check
         # http-check expect string success
+
+    log.debug("Routes:")
+    for r in app.url_map.iter_rules():
+        log.debug(f" {r.match} ")
+    log.debug("----")
 
     return app
