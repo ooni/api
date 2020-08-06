@@ -40,32 +40,93 @@ def list_collectors():
     return jsonify(j)
 
 
-@probe_services_blueprint.route("/api/v1/login")
-def login():
-    """
-    TODO
-    ---
-    responses:
-      '200':
-        description: TODO
-    """
-    return jsonify({"msg": "not implemented"})  # TODO
-
-
 @probe_services_blueprint.route("/api/v1/login", methods=["POST"])
 def login_post():
-    """
-    TODO
+    """Login - used by probes
     ---
+    parameters:
+      - in: body
+        name: auth data
+        description: Username and password
+        required: true
+        schema:
+          type: object
+          properties:
+            username:
+              type: string
+            password:
+              type: string
     responses:
       '200':
-        description: TODO
+        description: Auth object
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                  description: Token
+                expire:
+                  type: string
+                  description: Expiration time
     """
     return jsonify({"msg": "not implemented"})  # TODO
 
 
-@probe_services_blueprint.route("/api/v1/register")
+@probe_services_blueprint.route("/api/v1/register", methods=["POST"])
 def register():
+    """Register - used by probes
+    ---
+    parameters:
+      - in: body
+        name: register data
+        description: Registration data
+        required: true
+        schema:
+          type: object
+          properties:
+            ProbeCC:
+              type: string
+            ProbeASN:
+              type: string
+            Platform:
+              type: string
+            SoftwareName:
+              type: string
+            SoftwareVersion:
+              type: string
+            SupportedTests:
+              type: array
+              items:
+                type: string
+            NetworkType:
+              type: string
+            AvailableBandwidth:
+              type: string
+            Language:
+              type: string
+            Token:
+              type: string
+            Password:
+              type: string
+    responses:
+      '200':
+        description: Registration confirmation
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  description: client_id
+                  type: string
+    """
+    return jsonify({"msg": "not implemented"})  # TODO
+
+
+@probe_services_blueprint.route("/api/v1/update/<clientID>", methods=["PUT"])
+def api_update(clientID):
     """
     TODO
     ---
@@ -152,18 +213,6 @@ def serve_psiphon_config():
 ## JWT required
 @probe_services_blueprint.route("/api/v1/test-list/tor-targets")
 def serve_tor_targets():
-    """
-    TODO
-    ---
-    responses:
-      '200':
-        description: TODO
-    """
-    return jsonify({"msg": "not implemented"})  # TODO
-
-
-@probe_services_blueprint.route("/api/v1/update/<clientID>")
-def api_update(clientID):
     """
     TODO
     ---
