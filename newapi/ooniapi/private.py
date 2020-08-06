@@ -76,16 +76,34 @@ def api_private_stats_by_month(orm_stat):
 
 @api_private_blueprint.route("/asn_by_month")
 def api_private_asn_by_month():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     return jsonify(api_private_stats_by_month("COUNT(DISTINCT probe_asn)"))
 
 
 @api_private_blueprint.route("/countries_by_month")
 def api_private_countries_by_month():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     return jsonify(api_private_stats_by_month("COUNT(DISTINCT probe_cc)"))
 
 
 @api_private_blueprint.route("/runs_by_month")
 def api_private_runs_by_month():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     # The query takes ~6s on local SSD @ AMS on 2018-04-04.
     # It was taking ~20s when it was fetching all the table from DB and doing grouping locally.
     # TODO: use-count-table
@@ -113,6 +131,12 @@ def api_private_runs_by_month():
 
 @api_private_blueprint.route("/reports_per_day")
 def api_private_reports_per_day():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     # TODO: use-count-table
     # FIXME: support fastpath
     rawsql = """SELECT
@@ -129,6 +153,12 @@ def api_private_reports_per_day():
 
 @api_private_blueprint.route("/test_names", methods=["GET"])
 def api_private_test_names():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     return jsonify(
         {"test_names": [{"id": k, "name": v} for k, v in TEST_NAMES.items()]}
     )
@@ -136,6 +166,12 @@ def api_private_test_names():
 
 @api_private_blueprint.route("/countries", methods=["GET"])
 def api_private_countries():
+    """ TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     # We don't consider this field anymore:
     # with_counts = request.args.get("with_counts")
 
@@ -175,6 +211,10 @@ def api_private_quotas_summary():
 def check_report_id():
     """Check if a report_id exists either in the fastpath table or in the
     report table. Used by https://github.com/ooni/probe/issues/1034
+    ---
+    responses:
+      '200':
+        description: TODO
     """
     report_id = request.args.get("report_id")
     rawsql = """SELECT COALESCE (
@@ -189,44 +229,6 @@ def check_report_id():
         return response
     except Exception as e:
         return jsonify(dict(v=0, error=str(e)))
-
-
-# Deprecated endpoints for legacy OONI Explorer
-
-
-@api_private_blueprint.route("/blockpages", methods=["GET"])
-def api_private_blockpages():
-    abort(404)
-
-
-@api_private_blueprint.route("/website_measurements", methods=["GET"])
-def api_private_website_measurements():
-    abort(404)
-
-
-@api_private_blueprint.route("/blockpage_detected", methods=["GET"])
-def api_private_blockpage_detected():
-    abort(404)
-
-
-@api_private_blueprint.route("/blockpage_count", methods=["GET"])
-def api_private_blockpage_count():
-    abort(404)
-
-
-@api_private_blueprint.route("/measurement_count_by_country", methods=["GET"])
-def api_private_measurement_count_by_country():
-    abort(404)
-
-
-@api_private_blueprint.route("/measurement_count_total", methods=["GET"])
-def api_private_measurement_count_total():
-    abort(404)
-
-
-# END endpoints for legacy explorer
-
-# BEGIN endpoints for new explorer
 
 
 def last_30days():
@@ -322,6 +324,12 @@ def get_recent_test_coverage(probe_cc):
 
 @api_private_blueprint.route("/test_coverage", methods=["GET"])
 def api_private_test_coverage():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     probe_cc = request.args.get("probe_cc")
     if probe_cc is None or len(probe_cc) != 2:
         raise BadRequest("missing probe_cc")
@@ -340,6 +348,12 @@ def api_private_test_coverage():
 
 @api_private_blueprint.route("/website_networks", methods=["GET"])
 def api_private_website_network_tests():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     probe_cc = request.args.get("probe_cc")
     if probe_cc is None or len(probe_cc) != 2:
         raise BadRequest("missing probe_cc")
@@ -383,6 +397,12 @@ sql_failure_count = sql.text(
 
 @api_private_blueprint.route("/website_stats", methods=["GET"])
 def api_private_website_stats():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     url = request.args.get("input")
 
     probe_cc = request.args.get("probe_cc")
@@ -445,6 +465,12 @@ ORDER BY test_day;"""
 
 @api_private_blueprint.route("/website_urls", methods=["GET"])
 def api_private_website_test_urls():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     limit = int(request.args.get("limit", 10))
     if limit <= 0:
         limit = 10
@@ -532,6 +558,12 @@ def api_private_website_test_urls():
 
 @api_private_blueprint.route("/vanilla_tor_stats", methods=["GET"])
 def api_private_vanilla_tor_stats():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     probe_cc = request.args.get("probe_cc")
     if probe_cc is None or len(probe_cc) != 2:
         raise BadRequest("missing probe_cc")
@@ -609,6 +641,12 @@ GROUP BY 1;"""
 
 @api_private_blueprint.route("/im_networks", methods=["GET"])
 def api_private_im_networks():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     probe_cc = request.args.get("probe_cc")
     if probe_cc is None or len(probe_cc) != 2:
         raise BadRequest("missing probe_cc")
@@ -662,6 +700,12 @@ def api_private_im_networks():
 
 @api_private_blueprint.route("/im_stats", methods=["GET"])
 def api_private_im_stats():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     test_name = request.args.get("test_name")
     if not test_name or test_name not in TEST_GROUPS["im"]:
         raise BadRequest("invalid test_name")
@@ -720,6 +764,12 @@ ORDER BY test_day;"""
 
 @api_private_blueprint.route("/network_stats", methods=["GET"])
 def api_private_network_stats():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     probe_cc = request.args.get("probe_cc")
     if probe_cc is None or len(probe_cc) != 2:
         raise BadRequest("missing probe_cc")
@@ -793,6 +843,12 @@ def api_private_network_stats():
 
 @api_private_blueprint.route("/country_overview", methods=["GET"])
 def api_private_country_overview():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     probe_cc = request.args.get("probe_cc")
     if probe_cc is None or len(probe_cc) != 2:
         raise BadRequest("missing probe_cc")
@@ -847,6 +903,12 @@ def api_private_country_overview():
 
 @api_private_blueprint.route("/global_overview", methods=["GET"])
 def api_private_global_overview():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     row = current_app.db_session.execute(
         select(
             [
@@ -864,6 +926,12 @@ def api_private_global_overview():
 
 @api_private_blueprint.route("/global_overview_by_month", methods=["GET"])
 def api_private_global_by_month():
+    """TODO
+    ---
+    responses:
+      '200':
+        description: TODO
+    """
     return jsonify(
         {
             "networks_by_month": api_private_stats_by_month(
