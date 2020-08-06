@@ -128,7 +128,7 @@ def register():
 @probe_services_blueprint.route("/api/v1/update/<clientID>", methods=["PUT"])
 def api_update(clientID):
     """
-    TODO
+    TODO / UNUSED?
     ---
     responses:
       '200':
