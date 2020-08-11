@@ -5,7 +5,7 @@ Warning: this test runs against a real database
 See README.adoc
 
 Lint using:
-    black -t py37 -l 100 --fast  tests/integ/test_integration.py
+    black -t py37 -l 100 --fast ooniapi/tests/integ/test_probe_services.py
 
 Test using:
     tox -e integ -- -s --show-capture=no -k test_aggregation
