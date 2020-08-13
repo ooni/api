@@ -88,7 +88,7 @@ def init_app(app, testmode=False):
     log.info("Configuration loaded")
 
     # Prevent messy duplicate logs during testing
-    #if not testmode:
+    # if not testmode:
     #    app.logger.addHandler(logging.StreamHandler())
 
     stage = app.config["APP_ENV"]
@@ -141,7 +141,13 @@ def create_app(*args, testmode=False, **kw):
     # Whitelist Prometheus and AMS Explorer
     # TODO: move addrs to an external config file /etc/ooniapi.conf ?
     whitelist = ["37.218.245.43", "37.218.242.149"]
-    app.limiter = FlaskLimiter(limits=limits, app=app, whitelisted_ipaddrs=whitelist)
+    unmetered_pages = ["/", "/health"]
+    app.limiter = FlaskLimiter(
+        limits=limits,
+        app=app,
+        whitelisted_ipaddrs=whitelist,
+        unmetered_pages=unmetered_pages,
+    )
 
     Swagger(app, parse=True)
 
@@ -170,9 +176,10 @@ def create_app(*args, testmode=False, **kw):
         # option httpchk GET /check
         # http-check expect string success
 
-    log.debug("Routes:")
-    for r in app.url_map.iter_rules():
-        log.debug(f" {r.match} ")
-    log.debug("----")
+    if False:
+        log.debug("Routes:")
+        for r in app.url_map.iter_rules():
+            log.debug(f" {r.match} ")
+        log.debug("----")
 
     return app

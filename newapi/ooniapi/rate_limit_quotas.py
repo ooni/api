@@ -14,9 +14,13 @@ Also provides a connector for Flask
 
 """
 
+# TODO: add token-based limiting
+
 import time
 import ipaddress
 from typing import Dict, List, Optional, Tuple, Union
+
+from ooniapi.config import metrics
 
 IpAddress = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
 IpAddrBucket = Dict[IpAddress, float]
@@ -32,6 +36,7 @@ class Limiter:
         token_check_callback=None,
         ipaddr_methods=["X-Real-Ip", "socket"],
         whitelisted_ipaddrs=Optional[List[str]],
+        unmetered_pages=Optional[List[str]],
     ):
         # Bucket sequence: month, week, day
         self._ipaddr_limits = [
@@ -48,6 +53,7 @@ class Limiter:
         self._ipaddr_extraction_methods = ipaddr_methods
         self._last_quota_update_time = time.monotonic()
         self._whitelisted_ipaddrs = set()
+        self._unmetered_pages = set(unmetered_pages or ())
         for ipa in whitelisted_ipaddrs or []:
             self._whitelisted_ipaddrs.add(ipaddress.ip_address(ipa))
 
@@ -59,13 +65,11 @@ class Limiter:
         if tdelta <= 0:
             return
 
+        # TODO: use zip()
         iterable = (
             (30 * 24, self._ipaddr_limits[0], self._ipaddr_buckets[0]),
-            (7 * 24, self._ipaddr_limits[0], self._ipaddr_buckets[0]),
-            (1 * 24, self._ipaddr_limits[0], self._ipaddr_buckets[0]),
-            (30 * 24, self._ipaddr_limits[0], self._ipaddr_buckets[0]),
-            (7 * 24, self._ipaddr_limits[0], self._ipaddr_buckets[0]),
-            (1 * 24, self._ipaddr_limits[0], self._ipaddr_buckets[0]),
+            (7 * 24, self._ipaddr_limits[1], self._ipaddr_buckets[1]),
+            (1 * 24, self._ipaddr_limits[2], self._ipaddr_buckets[2]),
         )
         for hours, limit, bucket in iterable:
             vdelta = limit / hours / 3600 * tdelta
@@ -80,19 +84,29 @@ class Limiter:
             for k in to_delete:
                 del bucket[k]
 
+    def _generate_bucket_stats(self):
+        periods = ("month", "week", "day")
+        for b, period in zip(self._ipaddr_buckets, periods):
+            size = len(b)
+            metrics.gauge(f"rate-limit-ipaddrs-{period}", size)
+            print(size)
+
     def refresh_quota_counters_if_needed(self):
         t = time.monotonic()
         delta = t - self._last_quota_update_time
         if delta > 3600:
             self.increment_quota_counters(delta)
+            self._last_quota_update_time = t
+            self._generate_bucket_stats()
 
-        self._last_quota_update_time = t
-
-    def consume_quota(self, elapsed: float, ipaddr: Optional[IpAddress]=None, token=None) -> None:
+    def consume_quota(
+        self, elapsed: float, ipaddr: Optional[IpAddress] = None, token=None
+    ) -> None:
         """Consume quota in seconds
         """
         assert ipaddr or token
         if ipaddr:
+            # TODO handle IPv6?
             assert isinstance(ipaddr, ipaddress.IPv4Address)
             for n, limit in enumerate(self._ipaddr_limits):
                 b = self._ipaddr_buckets[n]
@@ -123,6 +137,9 @@ class Limiter:
 
     def is_ipaddr_whitelisted(self, ipaddr: IpAddress) -> bool:
         return ipaddr in self._whitelisted_ipaddrs
+
+    def is_page_unmetered(self, path) -> bool:
+        return path in self._unmetered_pages
 
     def get_lowest_daily_quotas_summary(self, n=20) -> List[Tuple[int, float]]:
         """Returns a summary of daily quotas with the lowest values
@@ -163,8 +180,14 @@ class FlaskLimiter:
         """Check rate limits before processing a request
         Refresh quota counters when needed
         """
-        self._limiter.refresh_quota_counters_if_needed()
         ipaddr = self._get_client_ipaddr()
+        if self._limiter.is_ipaddr_whitelisted(ipaddr):
+            return
+
+        if self._limiter.is_page_unmetered(request.path):
+            return
+
+        self._limiter.refresh_quota_counters_if_needed()
         # token = request.headers.get("Token", None)
         # if token:
         # check token validity
@@ -177,13 +200,18 @@ class FlaskLimiter:
         """
         log = current_app.logger
         try:
+            ipaddr = self._get_client_ipaddr()
+            if self._limiter.is_ipaddr_whitelisted(ipaddr):
+                return response
+
+            if self._limiter.is_page_unmetered(request.path):
+                return
+
             assert response
             tdelta = time.monotonic() - self._request_start_time
-            ipaddr = self._get_client_ipaddr()
-            if not self._limiter.is_ipaddr_whitelisted(ipaddr):
-                self._limiter.consume_quota(tdelta, ipaddr=ipaddr)
-                q = self._limiter.get_minimum_across_quotas(ipaddr=ipaddr)
-                response.headers.add("X-RateLimit-Remaining", q)
+            self._limiter.consume_quota(tdelta, ipaddr=ipaddr)
+            q = self._limiter.get_minimum_across_quotas(ipaddr=ipaddr)
+            response.headers.add("X-RateLimit-Remaining", int(q))
 
         except Exception as e:
             log.error(str(e), exc_info=True)
@@ -198,6 +226,7 @@ class FlaskLimiter:
         token_check_callback=None,
         ipaddr_methods=["X-Real-Ip", "socket"],
         whitelisted_ipaddrs=None,
+        unmetered_pages=None,
     ):
         """
         """
@@ -206,6 +235,7 @@ class FlaskLimiter:
             token_check_callback=token_check_callback,
             ipaddr_methods=ipaddr_methods,
             whitelisted_ipaddrs=whitelisted_ipaddrs,
+            unmetered_pages=unmetered_pages,
         )
         if app.extensions.get("limiter"):
             raise Exception("The Flask app already has an extension named 'limiter'")
