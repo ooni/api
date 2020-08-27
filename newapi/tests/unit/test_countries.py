@@ -2,7 +2,4 @@ from ooniapi.countries import lookup_country
 
 
 def test_lookup():
-    c = lookup_country("IT")
-
-    assert c.alpha_2 == "IT"
-    assert c.name == "Italy"
+    assert lookup_country("IT") == "Italy"
