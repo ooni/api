@@ -20,7 +20,7 @@ from sqlalchemy import func, and_, or_, sql, select
 
 from werkzeug.exceptions import BadRequest
 
-from ooniapi.models import TEST_NAMES, TEST_GROUPS, get_test_group_case
+from ooniapi.models import TEST_GROUPS, get_test_group_case
 from ooniapi.countries import lookup_country
 
 # The private API is exposed under the prefix /api/_
@@ -28,72 +28,49 @@ from ooniapi.countries import lookup_country
 
 api_private_blueprint = Blueprint("api_private", "measurements")
 
+# TODO: configure tags for HTTP caching across where useful
+
 
 def daterange(start_date, end_date):
     for n in range(int((end_date - start_date).days)):
         yield start_date + timedelta(n)
 
 
-def api_private_stats_by_month(orm_stat):
-    # data for https://api.ooni.io/stats
-    # Report.test_start_time protection against time travellers may be
-    # implemented in a better way, but that sanity check is probably enough.
-    # ooni_epoch = datetime(2012, 12, 1)
-
-    now = datetime.now()
-    end_date = datetime(now.year, now.month, 1)
-    start_date = end_date - relativedelta(months=24)
-
-    s = (
-        select(
-            [
-                func.date_trunc("month", sql.text("bucket_date")).label("bucket_month"),
-                sql.text(orm_stat),
-            ]
-        )
-        .where(
-            and_(
-                sql.text("bucket_date > :start_date"),
-                sql.text("bucket_date < :end_date"),
-            )
-        )
-        .group_by("bucket_month")
-        .select_from(sql.table("ooexpl_bucket_msm_count"))
-    )
-
-    r = current_app.db_session.execute(
-        s, {"start_date": start_date, "end_date": end_date}
-    )
-    result = [
-        {
-            "date": (bkt + relativedelta(months=+1, days=-1)).strftime("%Y-%m-%d"),
-            "value": value,
-        }
-        for bkt, value in sorted(r)
-    ]
-    return result
+def cachedjson(interval_hours: int, *a, **kw):
+    """Jsonify and add cache expiration"""
+    resp = jsonify(*a, **kw)
+    resp.cache_control.max_age = interval_hours * 3600
+    return resp
 
 
 @api_private_blueprint.route("/asn_by_month")
 def api_private_asn_by_month():
-    """TODO
+    """Network count by month
     ---
     responses:
       '200':
-        description: TODO
+        description: [{"date":"2018-08-31","value":4411}, ... ]
     """
-    return jsonify(api_private_stats_by_month("COUNT(DISTINCT probe_asn)"))
+    cols = [sql.text("networks_by_month"), sql.text("month")]
+    q = select(cols).select_from(sql.table("global_by_month"))
+    q = current_app.db_session.execute(q)
+    li = [dict(date=r[1], value=r[0]) for r in q]
+    return cachedjson(24, li)
 
 
 @api_private_blueprint.route("/countries_by_month")
 def api_private_countries_by_month():
-    """TODO
+    """Countries count by month
     ---
     responses:
       '200':
         description: TODO
     """
-    return jsonify(api_private_stats_by_month("COUNT(DISTINCT probe_cc)"))
+    cols = [sql.text("countries_by_month"), sql.text("month")]
+    q = select(cols).select_from(sql.table("global_by_month"))
+    q = current_app.db_session.execute(q)
+    li = [dict(date=r[1], value=r[0]) for r in q]
+    return cachedjson(24, li)
 
 
 @api_private_blueprint.route("/runs_by_month")
@@ -159,44 +136,49 @@ def api_private_test_names():
       '200':
         description: TODO
     """
-    return jsonify(
-        {"test_names": [{"id": k, "name": v} for k, v in TEST_NAMES.items()]}
-    )
+    TEST_NAMES = {
+        "bridge_reachability": "Bridge Reachability",
+        "dash": "DASH",
+        "dns_consistency": "DNS Consistency",
+        "facebook_messenger": "Facebook Messenger",
+        "http_header_field_manipulation": "HTTP Header Field Manipulation",
+        "http_host": "HTTP Host",
+        "http_invalid_request_line": "HTTP Invalid Request Line",
+        "http_requests": "HTTP Requests",
+        "meek_fronted_requests_test": "Meek Fronted Requests",
+        "multi_protocol_traceroute": "Multi Protocol Traceroute",
+        "ndt": "NDT",
+        "psiphon": "Psiphon",
+        "tcp_connect": "TCP Connect",
+        "telegram": "Telegram",
+        "tor": "Tor",
+        "vanilla_tor": "Vanilla Tor",
+        "web_connectivity": "Web Connectivity",
+        "whatsapp": "WhatsApp",
+    }
+    test_names = [{"id": k, "name": v} for k, v in TEST_NAMES.items()]
+    return cachedjson(48, test_names=test_names)
 
 
 @api_private_blueprint.route("/countries", methods=["GET"])
 def api_private_countries():
-    """ TODO
+    """Summary of countries
     ---
     responses:
       '200':
         description: TODO
     """
-    # We don't consider this field anymore:
-    # with_counts = request.args.get("with_counts")
-
-    s = (
-        select([sql.text("SUM(count)"), sql.text("probe_cc")])
-        .group_by(sql.text("probe_cc"))
-        .order_by(sql.text("probe_cc"))
-        .select_from(sql.table("ooexpl_bucket_msm_count"))
-    )
-
-    q = current_app.db_session.execute(s)
-    country_list = []
-    for count, probe_cc in q:
-        if probe_cc.upper() == "ZZ":
-            continue
-
+    cols = [sql.text("measurement_count"), sql.text("probe_cc")]
+    q = select(cols).select_from(sql.table("country_stats"))
+    c = []
+    for r in current_app.db_session.execute(q):
         try:
-            c = lookup_country(probe_cc)
-            country_list.append(
-                {"count": int(count), "alpha_2": c.alpha_2, "name": c.name}
-            )
-        except Exception as exc:
-            current_app.logger.warning("Failed to lookup: %s" % probe_cc)
+            name = lookup_country(r.probe_cc)
+            c.append(dict(alpha_2=r.probe_cc, name=name, count=r.measurement_count))
+        except KeyError:
+            pass
 
-    return jsonify({"countries": country_list})
+    return jsonify(countries=c)
 
 
 @api_private_blueprint.route("/quotas_summary", methods=["GET"])
@@ -243,6 +225,8 @@ def last_30days():
 
 
 def get_recent_network_coverage(probe_cc, test_groups):
+    # FIXME
+    return []
     where_clause = [
         sql.text("test_day >= current_date - interval '31 day'"),
         sql.text("test_day < current_date"),
@@ -282,6 +266,9 @@ def get_recent_network_coverage(probe_cc, test_groups):
 
 
 def get_recent_test_coverage(probe_cc):
+    # FIXME
+    return []
+
     s = (
         select(
             [
@@ -851,95 +838,110 @@ def api_private_country_overview():
     """
     probe_cc = request.args.get("probe_cc")
     if probe_cc is None or len(probe_cc) != 2:
-        raise BadRequest("missing probe_cc")
+        raise BadRequest("missing or incorrect probe_cc")
 
-    row = current_app.db_session.execute(
-        select([sql.text("COUNT(DISTINCT input)")])
-        .where(
-            and_(
-                sql.text("confirmed_count > 0"),
-                sql.text("probe_cc = :probe_cc"),
-                sql.text("test_day >= current_date - interval '31 day'"),
-            )
-        )
-        .select_from(sql.table("ooexpl_wc_input_counts")),
-        {"probe_cc": probe_cc},
-    ).fetchone()
-    websites_confirmed_blocked = row[0]
-
-    row = current_app.db_session.execute(
-        select([sql.text("SUM(count)"), sql.text("COUNT(DISTINCT probe_asn)")])
-        .where(and_(sql.text("probe_cc = :probe_cc")))
-        .select_from(sql.table("ooexpl_bucket_msm_count")),
-        {"probe_cc": probe_cc},
-    ).fetchone()
-    measurement_count = row[0]
-    network_count = row[1]
-
-    row = current_app.db_session.execute(
-        select([sql.text("bucket_date")])
-        .where(and_(sql.text("probe_cc = :probe_cc")))
-        .select_from(sql.table("ooexpl_bucket_msm_count"))
-        .order_by(sql.text("bucket_date ASC"))
-        .limit(1),
-        {"probe_cc": probe_cc},
-    ).fetchone()
-    first_bucket_date = None
-    if row:
-        first_bucket_date = row[0]
-
+    # FIXME
     return jsonify(
         {
-            "websites_confirmed_blocked": websites_confirmed_blocked,
-            "middlebox_detected_networks": None,
-            "im_apps_blocked": None,
             "circumvention_tools_blocked": None,
-            "measurement_count": measurement_count,
-            "network_count": network_count,
-            "first_bucket_date": first_bucket_date,
+            "first_bucket_date": "2013-10-29",
+            "im_apps_blocked": None,
+            "measurement_count": 6652155,
+            "middlebox_detected_networks": None,
+            "network_count": 333,
+            "websites_confirmed_blocked": 3,
         }
     )
+
+    # row = current_app.db_session.execute(
+    #     select([sql.text("COUNT(DISTINCT input)")])
+    #     .where(
+    #         and_(
+    #             sql.text("confirmed_count > 0"),
+    #             sql.text("probe_cc = :probe_cc"),
+    #             sql.text("test_day >= current_date - interval '31 day'"),
+    #         )
+    #     )
+    #     .select_from(sql.table("ooexpl_wc_input_counts")),
+    #     {"probe_cc": probe_cc},
+    # ).fetchone()
+    # websites_confirmed_blocked = row[0]
+    #
+    # "COUNT(DISTINCT input)   confirmed_count > 0"
+    # probe_cc = :probe_cc"),
+    # test_day >= current_date - interval '31 day'"),
+    # ).fetchone()
+    # websites_confirmed_blocked = row[0]
+
+    # row = current_app.db_session.execute(
+    #    select([sql.text("SUM(count)"), sql.text("COUNT(DISTINCT probe_asn)")])
+    #    .where(and_(sql.text("probe_cc = :probe_cc")))
+    #    .select_from(sql.table("ooexpl_bucket_msm_count")),
+    #    {"probe_cc": probe_cc},
+    # ).fetchone()
+    # measurement_count = row[0]
+    # network_count = row[1]
+
+    # row = current_app.db_session.execute(
+    #    select([sql.text("bucket_date")])
+    #    .where(and_(sql.text("probe_cc = :probe_cc")))
+    #    .select_from(sql.table("ooexpl_bucket_msm_count"))
+    #    .order_by(sql.text("bucket_date ASC"))
+    #    .limit(1),
+    #    {"probe_cc": probe_cc},
+    # ).fetchone()
+    # first_bucket_date = None
+    # if row:
+    #    first_bucket_date = row[0]
+
+    # return jsonify(
+    #    {
+    #        "websites_confirmed_blocked": websites_confirmed_blocked,
+    #        "middlebox_detected_networks": None,
+    #        "im_apps_blocked": None,
+    #        "circumvention_tools_blocked": None,
+    #        "measurement_count": measurement_count,
+    #        "network_count": network_count,
+    #        "first_bucket_date": first_bucket_date,
+    #    }
+    # )
 
 
 @api_private_blueprint.route("/global_overview", methods=["GET"])
 def api_private_global_overview():
-    """TODO
+    """Provide global summary of measurements
+    Sources: global_stats db table
     ---
     responses:
       '200':
-        description: TODO
+        description: JSON struct TODO
     """
-    row = current_app.db_session.execute(
-        select(
-            [
-                sql.text("COUNT(DISTINCT probe_cc)"),
-                sql.text("COUNT(DISTINCT probe_asn)"),
-                sql.text("SUM(count)"),
-            ]
-        ).select_from(sql.table("ooexpl_bucket_msm_count"))
-    ).fetchone()
-
-    return jsonify(
-        {"country_count": row[0], "network_count": row[1], "measurement_count": row[2]}
-    )
+    q = select([sql.text("*")]).select_from(sql.table("global_stats"))
+    r = current_app.db_session.execute(q).fetchone()
+    return cachedjson(24, **dict(r))
 
 
 @api_private_blueprint.route("/global_overview_by_month", methods=["GET"])
 def api_private_global_by_month():
-    """TODO
+    """Provide global summary of measurements
+    Sources: global_by_month db table
     ---
     responses:
       '200':
-        description: TODO
+        description: JSON struct TODO
     """
-    return jsonify(
-        {
-            "networks_by_month": api_private_stats_by_month(
-                "COUNT(DISTINCT probe_asn)"
-            ),
-            "countries_by_month": api_private_stats_by_month(
-                "COUNT(DISTINCT probe_cc)"
-            ),
-            "measurements_by_month": api_private_stats_by_month("SUM(count)"),
-        }
+    q = select(
+        [
+            sql.text("countries_by_month"),
+            sql.text("networks_by_month"),
+            sql.text("measurements_by_month"),
+            sql.text("month"),
+        ]
+    ).select_from(sql.table("global_by_month"))
+    rows = current_app.db_session.execute(q).fetchall()
+    n = [{"date": r[3], "value": r[0]} for r in rows]
+    c = [{"date": r[3], "value": r[1]} for r in rows]
+    m = [{"date": r[3], "value": r[2]} for r in rows]
+    return cachedjson(
+        24, networks_by_month=n, countries_by_month=c, measurements_by_month=m
     )
