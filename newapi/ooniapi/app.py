@@ -8,7 +8,8 @@ import sys
 from flask import Flask, json
 
 # from flask_misaka import Misaka
-# from flask_cors import CORS
+from flask_cors import CORS  # debdeps: python3-flask-cors
+# python3-flask-cors has unnecessary dependencies :-/
 from ooniapi.rate_limit_quotas import FlaskLimiter
 
 from flasgger import Swagger
@@ -106,7 +107,7 @@ def init_app(app, testmode=False):
     # md = Misaka(fenced_code=True)
     # md.init_app(app)
 
-    # CORS(app, resources={r"/api/*": {"origins": "*"}})
+    CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 
 def check_config(config):
