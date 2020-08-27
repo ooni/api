@@ -85,9 +85,11 @@ def init_db(app):
         conn, cursor, statement, parameters, context, executemany
     ):
         qh = query_hash(statement)
-        query = cursor.mogrify(statement, parameters).decode()
-        conn.info.setdefault("query_start_time", []).append(time.time())
-        app.logger.debug("Starting query %s ---- %s ----", qh, query)
+        with metrics.timer(f"query-{qh}"):
+            query = cursor.mogrify(statement, parameters).decode()
+            conn.info.setdefault("query_start_time", []).append(time.time())
+            query = query.replace("\n", " ")
+            app.logger.debug("Starting query %s ---- %s ----", qh, query)
 
     @event.listens_for(Engine, "after_cursor_execute")
     def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
