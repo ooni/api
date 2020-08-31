@@ -107,7 +107,9 @@ def init_app(app, testmode=False):
     # md = Misaka(fenced_code=True)
     # md.init_app(app)
 
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    # FIXME
+    # CORS(app, resources={r"/api/*": {"origins": "*"}})
+    CORS(app, resources={r"*": {"origins": "*"}})
 
 
 def check_config(config):
