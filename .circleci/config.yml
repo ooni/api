@@ -12,7 +12,7 @@ jobs:
             apt-get install -y --no-install-recommends git python3 python3-requests
             ./.circleci/debops-ci ci
 
-  test:
+  end_to_end_test:
     # Deploy API + fastpath + database + ooniprobe
 
     docker:
@@ -29,3 +29,11 @@ jobs:
       - run: echo "deb [trusted=yes] https://dl.bintray.com/ooni/internal-pull-requests unstable main" | sudo tee /etc/apt/sources.list.d/bintray.list
       - run: sudo apt-get update
       - run: sudo apt-get install -y fastpath analysis ooni-api
+
+workflows:
+  version: 2
+
+  my_workflows:
+    jobs:
+      - build
+      - end_to_end_test
