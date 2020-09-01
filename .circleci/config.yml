@@ -19,14 +19,16 @@ jobs:
       # Primary container image where all commands run
       - image: debian:stable
         environment:
-          POSTGRES_HOST_AUTH_METHOD: trust
           TEST_DATABASE_URL: postgresql://root@localhost/metadb
 
       # Service container image
       - image: circleci/postgres:11
+        environment:
+          POSTGRES_HOST_AUTH_METHOD: trust
 
     steps:
       - run: whoami
+      - run: DEBIAN_FRONTEND=noninteractive apt-get update
       - run: DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
       - run: echo "deb [trusted=yes] https://dl.bintray.com/ooni/internal-pull-requests unstable main" > /etc/apt/sources.list.d/bintray.list
       - run: echo "deb http://deb.debian.org/debian buster-backports main" > /etc/apt/sources.list.d/backports.list
