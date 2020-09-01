@@ -1,6 +1,6 @@
 version: 2
 jobs:
-  build:
+  create_deb_package:
     # Build .deb package
     docker:
       - image: debian:stable
@@ -19,6 +19,7 @@ jobs:
       # Primary container image where all commands run
       - image: debian:stable
         environment:
+          POSTGRES_HOST_AUTH_METHOD: trust
           TEST_DATABASE_URL: postgresql://root@localhost/metadb
 
       # Service container image
@@ -26,14 +27,14 @@ jobs:
 
     steps:
       - run: whoami
-      - run: echo "deb [trusted=yes] https://dl.bintray.com/ooni/internal-pull-requests unstable main" | sudo tee /etc/apt/sources.list.d/bintray.list
-      - run: sudo apt-get update
-      - run: sudo apt-get install -y fastpath analysis ooni-api
+      - run: echo "deb [trusted=yes] https://dl.bintray.com/ooni/internal-pull-requests unstable main" > /etc/apt/sources.list.d/bintray.list
+      - run: apt-get update
+      - run: apt-get install -y fastpath analysis ooni-api
 
 workflows:
   version: 2
 
   my_workflows:
     jobs:
-      - build
+      - create_deb_package
       - end_to_end_test
