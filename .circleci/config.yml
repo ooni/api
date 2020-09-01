@@ -27,9 +27,13 @@ jobs:
 
     steps:
       - run: whoami
+      - run: DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
       - run: echo "deb [trusted=yes] https://dl.bintray.com/ooni/internal-pull-requests unstable main" > /etc/apt/sources.list.d/bintray.list
-      - run: apt-get update
-      - run: apt-get install -y fastpath analysis ooni-api
+      - run: echo "deb http://deb.debian.org/debian buster-backports main" > /etc/apt/sources.list.d/backports.list
+      - run: DEBIAN_FRONTEND=noninteractive apt-get update
+      - run: DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y openssh-client ssl-cert
+      - run: mkdir -p /run/nodeexp/
+      - run: DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y fastpath analysis ooni-api
 
 workflows:
   version: 2
