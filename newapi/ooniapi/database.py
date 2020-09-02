@@ -50,11 +50,11 @@ def init_db(app):
     application_name = _gen_application_name()
     # Unfortunately this application_name is not logged during `connection authorized`,
     # but it is used for `disconnection` event even if the client dies during query!
+    query_timeout = app.config["DATABASE_STATEMENT_TIMEOUT"] * 1000
+    assert query_timeout > 1000
     connect_args = {
         "application_name": application_name,
-        "options": "-c statement_timeout={:d}".format(
-            app.config["DATABASE_STATEMENT_TIMEOUT"]
-        ),
+        "options": f"-c statement_timeout={query_timeout}",
     }
     app.db_engine = create_engine(
         app.config["DATABASE_URI_RO"], convert_unicode=True, connect_args=connect_args
@@ -68,8 +68,7 @@ def init_db(app):
 
     # Set query duration limits (in milliseconds)
     app.db_session.execute(
-        "SET statement_timeout = 30000;"
-        "SET idle_in_transaction_session_timeout = 60000"
+        "SET idle_in_transaction_session_timeout = 6000000"
     )
 
     # Set up hooks to log queries and generate metrics on a hash of the query statement
