@@ -15,7 +15,7 @@ probe_services_blueprint = Blueprint("ps_api", "probe_services")
 
 @probe_services_blueprint.route("/api/v1/collectors")
 def list_collectors():
-    """List collectors
+    """Probe Services: list collectors
     ---
     responses:
       '200':
@@ -42,7 +42,7 @@ def list_collectors():
 
 @probe_services_blueprint.route("/api/v1/login", methods=["POST"])
 def login_post():
-    """Login - used by probes
+    """Probe Services: login
     ---
     parameters:
       - in: body
@@ -76,7 +76,7 @@ def login_post():
 
 @probe_services_blueprint.route("/api/v1/register", methods=["POST"])
 def register():
-    """Register - used by probes
+    """Probe Services: Register
     ---
     parameters:
       - in: body
@@ -125,22 +125,21 @@ def register():
     return jsonify({"msg": "not implemented"})  # TODO
 
 
-@probe_services_blueprint.route("/api/v1/update/<clientID>", methods=["PUT"])
-def api_update(clientID):
-    """
-    TODO / UNUSED?
-    ---
-    responses:
-      '200':
-        description: TODO
-    """
-    return jsonify({"msg": "not implemented"})  # TODO
+# UNUSED
+# @probe_services_blueprint.route("/api/v1/update/<clientID>", methods=["PUT"])
+# def api_update(clientID):
+#     """Probe Services
+#     ---
+#     responses:
+#       '200':
+#         description: TODO
+#     """
+#     return jsonify({"msg": "not implemented"})  # TODO
 
 
 @probe_services_blueprint.route("/api/v1/test-helpers")
 def list_test_helpers():
-    """#f:1 pe bouncer
-    List collectors
+    """Probe Services: List collectors
     ---
     responses:
       '200':
@@ -187,17 +186,9 @@ def list_test_helpers():
     return jsonify(j)
 
 
-# key = 'secret'
-# encoded = jwt.encode({'some': 'payload'}, key, algorithm='HS256')
-#'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzb21lIjoicGF5bG9hZCJ9.4twFt5NiznN84AWoo1d7KO1T_yoc0Z6XOpOVswacPZg'
-# decoded = jwt.decode(encoded, key, algorithms='HS256')
-# {'some': 'payload'}
-##>>jwt.encode({'some': 'payload'}, 'secret', algorithm='HS256', headers={'kid': '230498151c214b788dd97f22b85410a5'})
-
-
 @probe_services_blueprint.route("/api/v1/test-list/psiphon-config")
 def serve_psiphon_config():
-    """
+    """Probe Services: Psiphon data
     TODO
     ---
     responses:
@@ -208,13 +199,10 @@ def serve_psiphon_config():
     return jsonify({"msg": "not implemented"})  # TODO
 
 
-#
 ## TODO
-## JWT required
 @probe_services_blueprint.route("/api/v1/test-list/tor-targets")
 def serve_tor_targets():
-    """
-    TODO
+    """Probe Services: Tor targets
     ---
     responses:
       '200':
@@ -225,8 +213,7 @@ def serve_tor_targets():
 
 @probe_services_blueprint.route("/api/private/v1/wcth")
 def forward_to_old_test_helper():
-    """
-    TODO
+    """Probe Services: TODO
     ---
     responses:
       '200':
@@ -237,8 +224,7 @@ def forward_to_old_test_helper():
 
 @probe_services_blueprint.route("/bouncer/net-tests")
 def bouncer_net_tests():
-    """
-    TODO
+    """Probe Services: TODO
     ---
     responses:
       '200':
@@ -249,8 +235,7 @@ def bouncer_net_tests():
 
 @probe_services_blueprint.route("/report", methods=["POST"])
 def open_report():
-    """
-    Open report
+    """Probe Services: Open report
     ---
     responses:
       '200':
@@ -261,8 +246,7 @@ def open_report():
 
 @probe_services_blueprint.route("/report/<reportID>")
 def receive_measurement(report_id):
-    """
-    Submit measurement
+    """Probe Services: Submit measurement
     ---
     responses:
       '200':
@@ -274,8 +258,7 @@ def receive_measurement(report_id):
 
 @probe_services_blueprint.route("/report/<reportID>/close", methods=["POST"])
 def close_report(report_id):
-    """
-    Close report
+    """Probe Services: Close report
     ---
     responses:
       '200':
