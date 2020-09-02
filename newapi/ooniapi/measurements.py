@@ -31,6 +31,8 @@ from ooniapi.config import REPORT_INDEX_OFFSET
 
 from flask import Blueprint
 
+import requests
+
 api_msm_blueprint = Blueprint("msm_api", "measurements")
 
 FASTPATH_MSM_ID_PREFIX = "temp-fid-"
@@ -306,6 +308,148 @@ def get_measurement(measurement_id, download=None):
         raise BadRequest("No measurement found")
 
 
+def _fetch_measurement_body(
+    autoclaved_fn: str, frame_off: int, frame_size: int, intra_off: int, intra_size: int
+) -> bytes:
+    """
+    """
+    REQID_HDR = "X-Request-ID"
+    AUTOCLAVED_BASE_URL = "http://datacollector.infra.ooni.io/ooni-public/autoclaved/"
+    # Usual size of LZ4 frames is 256kb of decompressed text.
+    # Largest size of LZ4 frame was ~55Mb compressed and ~56Mb decompressed.
+    # :-/
+    url = urljoin(current_app.config["AUTOCLAVED_BASE_URL"], autoclaved_fn)
+    range_header = "bytes={}-{}".format(frame_off, frame_off + frame_size - 1)
+    hdr = {"Range": range_header}
+    r = requests.get(url, headers=hdr)
+    r.raise_for_status()
+    blob = r.content
+    if len(blob) != frame_size:
+        raise RuntimeError("Failed to fetch LZ4 frame", len(blob), frame_size)
+
+    blob = lz4framed.decompress(blob)[intra_off : intra_off + intra_size]
+    if len(blob) != intra_size or blob[:1] != b"{" or blob[-1:] != b"}":
+        raise RuntimeError(
+            "Failed to decompress LZ4 frame to measurement.json",
+            len(blob),
+            intra_size,
+            blob[:1],
+            blob[-1:],
+        )
+
+    return blob
+
+
+@api_msm_blueprint.route("/v1/measurement_meta")
+def get_measurement_meta():
+    """Get metadata on one measurement by measurement_id + input
+    ---
+    parameters:
+      - name: report_id
+        in: query
+        type: string
+        description: The report_id to search measurements for
+      - name: input
+        in: query
+        type: string
+        minLength: 3 # `input` is handled by pg_trgm
+        description: The input (for example a URL or IP address) to search measurements for
+      - name: full
+        in: query
+        type: boolean
+        description: Include JSON measurement data if available
+    responses:
+      '200':
+        description: Returns a measurement, optionally including the JSON data
+        schema:
+          $ref: "#/definitions/MeasurementList"
+      default:
+        description: Default response
+    x-code-samples:
+      - lang: 'curl'
+        source: |
+          curl "https://api.ooni.io/api/v1/measurement_meta?report_id=FIXME&input=FIXME"
+    """
+    # TODO: see integ tests for TODO items
+    log = current_app.logger
+    param = request.args.get
+    report_id = param("report_id")
+    input = param("input")
+    full = param("full")
+    if not report_id:
+        raise BadRequest("Invalid report_id")
+
+    # Given report_id + input, fetch measurement data from fastpath table
+    cols = [
+        literal_column("anomaly"),
+        literal_column("confirmed"),
+        literal_column("msm_failure").label("failure"),
+        literal_column("input"),
+        literal_column("measurement_start_time"),
+        literal_column("probe_asn"),
+        literal_column("probe_cc"),
+        literal_column("report_id"),
+        cast(sql.text("scores"), String).label("scores"),
+        literal_column("test_name"),
+        literal_column("test_start_time"),
+    ]
+    table = sql.table("fastpath")
+
+    if input is None:
+        input = ""
+
+    if input is "":
+        cols.append(sql.text("null::text AS category_code"))
+
+    else:
+        cols.append(literal_column("citizenlab.category_code").label("category_code"))
+        table = table.join(
+            sql.table("citizenlab"),
+            sql.text("citizenlab.url = fastpath.input"),
+            isouter=True,
+        )
+
+    where = and_(
+        sql.text("fastpath.input = :input"), sql.text("fastpath.report_id = :report_id")
+    )
+    query = select(cols).where(where).select_from(table)
+
+    query_params = dict(input=input, report_id=report_id)
+    q = current_app.db_session.execute(query, query_params)
+    resp = q.fetchone()
+    if resp is None:
+        abort(404)
+
+    resp = dict(resp)
+
+    if full:
+        # if full, also fetch the measurement body
+        cols = [
+            literal_column("frame_off"),
+            literal_column("frame_size"),
+            literal_column("intra_off"),
+            literal_column("intra_size"),
+            literal_column("textname"),
+            literal_column("filename"),
+            literal_column("report_id"),
+            literal_column("input")
+        ]
+        where = and_(
+            sql.text("input = :input"), sql.text("report_id = :report_id")
+        )
+        query = select(cols).where(where).select_from(sql.table("autoclavedlookup"))
+        query_params = dict(input=input, report_id=report_id)
+        q = current_app.db_session.execute(query, query_params)
+        r = q.fetchone()
+        if r is None:
+            log.error(f"autoclaved record for {report_id} {input} not found")
+            abort(500)
+        body = _fetch_measurement_body(r.filename, r.frame_off, r.frame_size, r.intra_off, r.intra_size)
+        resp["data"] = body
+
+    return resp
+
+
 def _merge_results(tmpresults):
     """Trim list_measurements() outputs that share the same report_id/input
     """
@@ -543,7 +687,7 @@ def list_measurements():
         # func.coalesce(0).label("m_input_no"),
         # We use test_start_time here as the batch pipeline has many NULL measurement_start_times
         literal_column("measurement_start_time").label("test_start_time"),
-        literal_column("measurement_start_time").label("measurement_start_time"),
+        literal_column("measurement_start_time"),
         func.concat(FASTPATH_MSM_ID_PREFIX, sql.text("tid")).label("measurement_id"),
         literal_column("anomaly"),
         literal_column("confirmed"),
@@ -676,25 +820,6 @@ def list_measurements():
 
     fp_query = fp_query.order_by(text("{} {}".format(order_by, order)))
 
-    # merger = [
-    #    coal("test_start_time"),
-    #    coal("measurement_start_time"),
-    #    func.coalesce(
-    #        literal_column("mr.measurement_id"), literal_column("fp.measurement_id")
-    #    ).label("measurement_id"),
-    #    func.coalesce(literal_column("mr.m_report_no"), 0).label("m_report_no"),
-    #    coal("anomaly"),
-    #    coal("confirmed"),
-    #    coal("failure"),
-    #    func.coalesce(literal_column("fp.scores"), "{}").label("scores"),
-    #    column("exc"),
-    #    func.coalesce(literal_column("mr.residual_no"), 0).label("residual_no"),
-    #    coal("report_id"),
-    #    coal("probe_cc"),
-    #    coal("probe_asn"),
-    #    coal("test_name"),
-    #    coal("input"),
-    # ]
     # Assemble the "external" query. Run a final order by followed by limit and
     # offset
     query = fp_query.offset(offset).limit(limit)
@@ -727,6 +852,7 @@ def list_measurements():
                 }
             )
     except OperationalError as exc:
+        log.error(exc)
         if isinstance(exc.orig, QueryCanceledError):
             # Timeout due to a slow query. Generate metric and do not feed it
             # to Sentry.
@@ -1010,3 +1136,91 @@ def get_aggregated():
 
     except Exception as e:
         return jsonify({"v": 0, "error": str(e)})
+
+
+@api_msm_blueprint.route("/private/aggregation")
+def aggregation_form():
+    """Aggregated counters: HTML page
+    ---
+    responses:
+      '200':
+        description: Aggregation form
+    """
+    html = """
+<div>
+  <div>
+    <form class="form-container">
+      <div class="form-item">
+        <span class="label">CC</span>
+        <input name="probe_cc">
+      </div>
+      <div class="form-item">
+        <span class="label">ASN</span>
+        <input name="probe_asn">
+      </div>
+      <div class="form-item">
+        <span class="label">test name</span>
+        <input name="test_name" value="web_connectivity">
+      </div>
+      <div class="form-item">
+        <span class="label">domain</span>
+        <input name="domain">
+      </div>
+      <div class="form-item">
+        <span class="label">since</span>
+        <input name="since" value="2020-05-01">
+      </div>
+      <div class="form-item">
+        <span class="label">until</span>
+        <input name="until" value="2020-06-01">
+      </div>
+      <div class="form-item">
+        <span class="label">Category code</span>
+        <input name="category_code">
+      </div>
+      <div class="form-item">
+        <span class="label">axis_x</span>
+        <select name="axis x">
+          <option value="measurement_start_day" selected="">measurement_start_day</option>
+          <option value="domain">domain</option>
+          <option value="category_code">category_code</option>
+          <option value="probe_cc">probe_cc</option>
+          <option value="probe_asn">probe_asn</option>
+          <option value="">
+          </option>
+        </select>
+      </div>
+      <div class="form-item">
+        <span class="label">axis y</span>
+        <select name="axis_y">
+          <option value="measurement_start_day">measurement_start_day</option>
+          <option value="domain">domain</option>
+          <option value="category_code">category_code</option>
+          <option value="probe_cc">probe_cc</option>
+          <option value="probe_asn">probe_asn</option>
+          <option value="" selected="">
+          </option>
+        </select>
+      </div>
+      <input type="submit">
+    </form>
+  </div>
+  <style>
+.form-container {
+width: 800px;
+display: flex;
+flex-wrap: wrap;
+align-items: center;
+}
+.form-item .label {
+padding-right: 10px;
+padding-left: 20px;
+}
+.form-item {
+padding-bottom: 10px;
+}
+  </style>
+  </div>
+</div>
+        """
+    return html
