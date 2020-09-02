@@ -4,13 +4,11 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import os
-#import pathlib
-#import traceback
+import traceback
 
-#import werkzeug
 from flask import Response, current_app, render_template
-
-# from connexion import ProblemException, FlaskApi, Resolver, problem
+from flask import make_response
+from flask.json import jsonify
 
 from ooniapi.private import api_private_blueprint
 from ooniapi.measurements import api_msm_blueprint
@@ -46,6 +44,21 @@ HERE = os.path.abspath(os.path.dirname(__file__))
 #    )
 #    return FlaskApi.get_response(response)
 
+def render_generic_exception(exception):
+    """Log a traceback and return code 500 with a simple JSON
+    The CORS header is set as usual. Without this, an error could lead to browsers
+    caching a response without the correct CORS header.
+    """
+    # TODO: render_template 500.html instead?
+    current_app.logger.error(f"Exception: {exception}")
+    current_app.logger.error(
+        "".join(traceback.format_tb(exception.__traceback__))
+    )
+    try:
+        return make_response(jsonify(error=str(exception)), 500)
+    except:
+        return make_response("unhandled error", 500)
+
 
 def page_not_found(e):
     return render_template("404.html"), 404
@@ -55,6 +68,7 @@ def bad_request(e):
     return render_template("400.html", exception=e), 400
 
 def register(app):
+
     #app.register_blueprint(api_docs_blueprint, url_prefix="/api")
 
     # Measurements API:
@@ -71,8 +85,9 @@ def register(app):
     app.register_blueprint(probe_services_blueprint, url_prefix="")
     app.register_blueprint(prio_bp, url_prefix="")
 
-    #app.register_error_handler(ProblemException, render_problem_exception)
-    #app.register_error_handler(Exception, render_generic_exception)
 
-    app.errorhandler(404)(page_not_found)
-    app.errorhandler(400)(bad_request)
+    if "PYTEST_CURRENT_TEST" not in os.environ:
+
+        app.register_error_handler(Exception, render_generic_exception)
+        app.errorhandler(404)(page_not_found)
+        app.errorhandler(400)(bad_request)
