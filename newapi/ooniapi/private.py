@@ -5,7 +5,7 @@ In here live private API endpoints for use only by OONI services. You should
 not rely on these as they are likely to change, break in unexpected ways. Also
 there is no versioning on them.
 """
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
 from urllib.parse import urljoin, urlencode
@@ -43,6 +43,21 @@ def cachedjson(interval_hours: int, *a, **kw):
     return resp
 
 
+def validate_probe_cc_query_param():
+    probe_cc = request.args.get("probe_cc")
+    if probe_cc is None or len(probe_cc) != 2:
+        raise BadRequest("missing or incorrect probe_cc")
+    return probe_cc
+
+
+def validate_probe_asn_query_param():
+    probe_asn = request.args.get("probe_asn")
+    if probe_asn is None:
+        # TODO: validate and return int?
+        raise BadRequest("missing or incorrect probe_asn")
+    return probe_asn
+
+
 @api_private_blueprint.route("/asn_by_month")
 def api_private_asn_by_month():
     """Network count by month
@@ -51,6 +66,16 @@ def api_private_asn_by_month():
       '200':
         description: [{"date":"2018-08-31","value":4411}, ... ]
     """
+    # OLAP-use-case
+    #  CREATE MATERIALIZED VIEW global_by_month AS
+    #  SELECT
+    #      COUNT(DISTINCT probe_asn) AS networks_by_month,
+    #      COUNT(DISTINCT probe_cc) AS countries_by_month,
+    #      SUM(measurement_count) AS measurements_by_month,
+    #      date_trunc('month', measurement_start_day) AS month
+    #  FROM counters
+    #  WHERE measurement_start_day > DATE_TRUNC('month', NOW()) - interval '24 months'
+    #  GROUP BY date_trunc('month', measurement_start_day);
     cols = [sql.text("networks_by_month"), sql.text("month")]
     q = select(cols).select_from(sql.table("global_by_month"))
     q = current_app.db_session.execute(q)
@@ -66,6 +91,7 @@ def api_private_countries_by_month():
       '200':
         description: TODO
     """
+    # OLAP-use-case
     cols = [sql.text("countries_by_month"), sql.text("month")]
     q = select(cols).select_from(sql.table("global_by_month"))
     q = current_app.db_session.execute(q)
@@ -73,14 +99,15 @@ def api_private_countries_by_month():
     return cachedjson(24, li)
 
 
-@api_private_blueprint.route("/runs_by_month")
+# FIXME UNUSED @api_private_blueprint.route("/runs_by_month")
 def api_private_runs_by_month():
-    """TODO
+    """FIXME
     ---
     responses:
       '200':
         description: TODO
     """
+    raise NotImplementedError
     # The query takes ~6s on local SSD @ AMS on 2018-04-04.
     # It was taking ~20s when it was fetching all the table from DB and doing grouping locally.
     # TODO: use-count-table
@@ -106,7 +133,7 @@ def api_private_runs_by_month():
     return jsonify(result)
 
 
-@api_private_blueprint.route("/reports_per_day")
+# FIXME UNUSED @api_private_blueprint.route("/reports_per_day")
 def api_private_reports_per_day():
     """TODO
     ---
@@ -157,7 +184,7 @@ def api_private_test_names():
         "whatsapp": "WhatsApp",
     }
     test_names = [{"id": k, "name": v} for k, v in TEST_NAMES.items()]
-    return cachedjson(48, test_names=test_names)
+    return cachedjson(1, test_names=test_names)
 
 
 @api_private_blueprint.route("/countries", methods=["GET"])
@@ -178,7 +205,7 @@ def api_private_countries():
         except KeyError:
             pass
 
-    return jsonify(countries=c)
+    return cachedjson(24, countries=c)
 
 
 @api_private_blueprint.route("/quotas_summary", methods=["GET"])
@@ -191,26 +218,22 @@ def api_private_quotas_summary():
 
 @api_private_blueprint.route("/check_report_id", methods=["GET"])
 def check_report_id():
-    """Check if a report_id exists either in the fastpath table or in the
-    report table. Used by https://github.com/ooni/probe/issues/1034
+    """Check if a report_id exists either in the fastpath table
+    Used by https://github.com/ooni/probe/issues/1034
     ---
     responses:
       '200':
         description: TODO
     """
     report_id = request.args.get("report_id")
-    rawsql = """SELECT COALESCE (
-        (SELECT 1 FROM fastpath WHERE report_id = :rid LIMIT 1),
-        (SELECT 1 FROM report WHERE report_id = :rid LIMIT 1)
-    )"""
+    s = sql.text("SELECT 1 FROM fastpath WHERE report_id = :rid LIMIT 1")
     try:
-        q = current_app.db_session.execute(rawsql, dict(rid=report_id))
+        q = current_app.db_session.execute(s, dict(rid=report_id))
         found = q.fetchone()[0] is not None
-        response = jsonify(dict(v=0, found=found))
-        response.cache_control.max_age = 5
-        return response
+        return cachedjson(5 / 3600, v=0, found=found)  # cache 5min
+
     except Exception as e:
-        return jsonify(dict(v=0, error=str(e)))
+        return cachedjson(0, v=0, error=str(e))
 
 
 def last_30days():
@@ -225,11 +248,9 @@ def last_30days():
 
 
 def get_recent_network_coverage(probe_cc, test_groups):
-    # FIXME
-    return []
-    where_clause = [
-        sql.text("test_day >= current_date - interval '31 day'"),
-        sql.text("test_day < current_date"),
+    where = [
+        sql.text("measurement_start_day >= current_date - interval '31 day'"),
+        sql.text("measurement_start_day < current_date"),
         sql.text("probe_cc = :probe_cc"),
     ]
     if test_groups is not None:
@@ -242,14 +263,15 @@ def get_recent_network_coverage(probe_cc, test_groups):
                 ]
             except KeyError:
                 raise BadRequest("invalid test_group")
-        where_clause.append(or_(*tg_or))
+        where.append(or_(*tg_or))
 
     s = (
-        select([sql.text("COUNT(DISTINCT probe_asn)"), sql.text("test_day")])
-        .where(and_(*where_clause))
-        .group_by(sql.text("test_day"))
-        .order_by(sql.text("test_day"))
-        .select_from(sql.table("ooexpl_daily_msm_count"))
+        select(
+            [sql.text("COUNT(DISTINCT probe_asn)"), sql.text("measurement_start_day")]
+        )
+        .where(and_(*where))
+        .group_by(sql.text("measurement_start_day"))
+        .select_from(sql.table("counters_asn_noinput"))
     )
 
     network_map = {k: 0 for k in TEST_GROUPS.keys()}
@@ -266,42 +288,41 @@ def get_recent_network_coverage(probe_cc, test_groups):
 
 
 def get_recent_test_coverage(probe_cc):
-    # FIXME
-    return []
-
+    cols = [
+        sql.text("SUM(measurement_count) AS count"),
+        sql.text("measurement_start_day"),
+        sql.text(get_test_group_case() + " AS test_group"),
+    ]
+    where = and_(
+        sql.text("measurement_start_day >= (current_date - interval '31 day')"),
+        # We exclude the last day to wait for the pipeline
+        sql.text("measurement_start_day < current_date"),
+        sql.text("probe_cc = :probe_cc"),
+    )
     s = (
-        select(
-            [
-                sql.text("SUM(count)"),
-                sql.text("test_day"),
-                sql.text(get_test_group_case() + " AS test_group"),
-            ]
-        )
-        .where(
-            and_(
-                sql.text("test_day >= (current_date - interval '31 day')"),
-                # We exclude the last day to wait for the pipeline
-                sql.text("test_day < current_date"),
-                sql.text("probe_cc = :probe_cc"),
-            )
-        )
-        .group_by(sql.text("test_group, test_day"))
-        .order_by(sql.text("test_group, test_day"))
-        .select_from(sql.table("ooexpl_daily_msm_count"))
+        select(cols)
+        .where(where)
+        .group_by(sql.text("test_group, measurement_start_day"))
+        .order_by(sql.text("test_group, measurement_start_day"))
+        .select_from(sql.table("counters_noinput"))
     )
 
-    coverage_map = {k: {} for k in TEST_GROUPS.keys()}
+    # Use a coverage_map table to fill in zeroes on missing days
+    # TODO: cleanup/simplify
     q = current_app.db_session.execute(s, {"probe_cc": probe_cc})
-    for count, test_day, test_group in q:
-        coverage_map[test_group][test_day.strftime("%Y-%m-%d")] = int(count)
+    coverage_map = {k: {} for k in TEST_GROUPS.keys()}
+    for count, measurement_start_day, test_group in q:
+        coverage_map[test_group][measurement_start_day.strftime("%Y-%m-%d")] = int(
+            count
+        )
 
     test_coverage = []
     for test_group, coverage in coverage_map.items():
-        for test_day in last_30days():
+        for measurement_start_day in last_30days():
             test_coverage.append(
                 {
-                    "count": coverage_map[test_group].get(test_day, 0),
-                    "test_day": test_day,
+                    "count": coverage_map[test_group].get(measurement_start_day, 0),
+                    "test_day": measurement_start_day,
                     "test_group": test_group,
                 }
             )
@@ -311,26 +332,23 @@ def get_recent_test_coverage(probe_cc):
 
 @api_private_blueprint.route("/test_coverage", methods=["GET"])
 def api_private_test_coverage():
-    """TODO
+    """Return number of measurements per day across test categories
     ---
     responses:
       '200':
-        description: TODO
+          description: '{"network_coverage: [...], "test_coverage": [...]}'
     """
-    probe_cc = request.args.get("probe_cc")
-    if probe_cc is None or len(probe_cc) != 2:
-        raise BadRequest("missing probe_cc")
-
+    # TODO: merge the two queries into one?
+    # TODO: remove test categories or move aggregation to the front-end?
+    # OLAP-use-case
+    probe_cc = validate_probe_cc_query_param()
     test_groups = request.args.get("test_groups")
     if test_groups is not None:
         test_groups = test_groups.split(",")
 
-    return jsonify(
-        {
-            "test_coverage": get_recent_test_coverage(probe_cc),
-            "network_coverage": get_recent_network_coverage(probe_cc, test_groups),
-        }
-    )
+    tc = get_recent_test_coverage(probe_cc)
+    nc = get_recent_network_coverage(probe_cc, test_groups)
+    return cachedjson(24, network_coverage=nc, test_coverage=tc)
 
 
 @api_private_blueprint.route("/website_networks", methods=["GET"])
@@ -341,45 +359,23 @@ def api_private_website_network_tests():
       '200':
         description: TODO
     """
-    probe_cc = request.args.get("probe_cc")
-    if probe_cc is None or len(probe_cc) != 2:
-        raise BadRequest("missing probe_cc")
-
-    s = (
-        select([sql.text("COUNT(*)"), sql.text("probe_asn")])
-        .where(
-            and_(
-                sql.text("test_start_time >= current_date - interval '31 day'"),
-                sql.text("test_start_time < current_date"),
-                sql.text("probe_cc = :probe_cc"),
-            )
-        )
-        .group_by(sql.text("probe_asn"))
-        .order_by(sql.text("count DESC"))
-        .select_from(
-            sql.table("measurement").join(
-                sql.table("report"),
-                sql.text("report.report_no = measurement.report_no"),
-            )
-        )
+    probe_cc = validate_probe_cc_query_param()
+    s = sql.text(
+        """SELECT
+        SUM(measurement_count) AS count,
+        probe_asn
+        FROM counters_asn_noinput
+        WHERE
+            measurement_start_day >= current_date - interval '31 day'
+        AND measurement_start_day < current_date
+        AND probe_cc = :probe_cc
+        GROUP BY probe_asn
+        ORDER BY count DESC
+        """
     )
-
-    results = []
     q = current_app.db_session.execute(s, {"probe_cc": probe_cc})
-    for count, probe_asn in q:
-        results.append({"count": int(count), "probe_asn": int(probe_asn)})
-    return jsonify({"results": results})
-
-
-sql_anomaly_count = sql.text(
-    "COALESCE(sum(CASE WHEN anomaly = TRUE AND confirmed = FALSE AND msm_failure = FALSE THEN 1 ELSE 0 END), 0) AS anomaly_count"
-)
-sql_confirmed_count = sql.text(
-    "COALESCE(sum(CASE WHEN confirmed = TRUE THEN 1 ELSE 0 END), 0) AS confirmed_count"
-)
-sql_failure_count = sql.text(
-    "COALESCE(sum(CASE WHEN msm_failure = TRUE THEN 1 ELSE 0 END), 0) AS failure_count"
-)
+    results = [dict(r) for r in q]
+    return cachedjson(1, results=results)
 
 
 @api_private_blueprint.route("/website_stats", methods=["GET"])
@@ -390,64 +386,43 @@ def api_private_website_stats():
       '200':
         description: TODO
     """
+    # uses_pg_index counters_day_cc_asn_input_idx a BRIN index was not used at
+    # all, but BTREE on (measurement_start_day, probe_cc, probe_asn, input)
+    # made queries go from full scan to 50ms
     url = request.args.get("input")
-
-    probe_cc = request.args.get("probe_cc")
-    if probe_cc is None or len(probe_cc) != 2:
-        raise BadRequest("missing probe_cc")
-
-    probe_asn = request.args.get("probe_asn")
-    if probe_asn is None:
-        raise BadRequest("missing probe_asn")
+    probe_cc = validate_probe_cc_query_param()
+    probe_asn = validate_probe_asn_query_param()
 
     s = sql.text(
         """SELECT
-d.test_day,
-COALESCE(anomaly_count, 0) as anomaly_count,
-COALESCE(confirmed_count, 0) as confirmed_count,
-COALESCE(failure_count, 0) as failure_count,
-COALESCE(total_count, 0) as total_count
-FROM (
-(
-    SELECT
-    date_trunc('day', (current_date - offs)) AS test_day
-    FROM generate_series(0, 31, 1) AS offs
-) d
-LEFT OUTER JOIN
-(
-    SELECT
-    test_day,
-    SUM(anomaly_count) as anomaly_count,
-    SUM(confirmed_count) as confirmed_count,
-    SUM(failure_count) as failure_count,
-    SUM(total_count) as total_count
-    FROM ooexpl_wc_input_counts
-    WHERE test_day >= current_date - interval '31 day'
-    AND probe_cc =  :probe_cc
-    AND probe_asn = :probe_asn
-    AND input = :input
-    GROUP BY test_day
-) m
-ON d.test_day = m.test_day
-)
-ORDER BY test_day;"""
+             measurement_start_day,
+             SUM(anomaly_count) as anomaly_count,
+             SUM(confirmed_count) as confirmed_count,
+             SUM(failure_count) as failure_count,
+             SUM(measurement_count) as measurement_count
+             FROM counters
+             WHERE measurement_start_day >= current_date - interval '31 day'
+             AND measurement_start_day < current_date
+             AND probe_cc =  :probe_cc
+             AND probe_asn = :probe_asn
+             AND input = :input
+             GROUP BY measurement_start_day
+        """
     )
-
-    results = []
     q = current_app.db_session.execute(
         s, {"probe_cc": probe_cc, "probe_asn": probe_asn, "input": url}
     )
-    for test_day, anomaly_count, confirmed_count, failure_count, total_count in q:
-        results.append(
-            {
-                "test_day": test_day,
-                "anomaly_count": int(anomaly_count),
-                "confirmed_count": int(confirmed_count),
-                "failure_count": int(failure_count),
-                "total_count": int(total_count),
-            }
-        )
-    return jsonify({"results": results})
+    results = [
+        {
+            "test_day": r.measurement_start_day,
+            "anomaly_count": int(r.anomaly_count or 0),
+            "confirmed_count": int(r.confirmed_count or 0),
+            "failure_count": int(r.failure_count or 0),
+            "total_count": int(r.measurement_count or 0),
+        }
+        for r in q
+    ]
+    return cachedjson(1, results=results)
 
 
 @api_private_blueprint.route("/website_urls", methods=["GET"])
@@ -463,52 +438,55 @@ def api_private_website_test_urls():
         limit = 10
     offset = int(request.args.get("offset", 0))
 
-    probe_cc = request.args.get("probe_cc")
-    if probe_cc is None or len(probe_cc) != 2:
-        raise BadRequest("missing probe_cc")
-
-    probe_asn = request.args.get("probe_asn")
-    if probe_asn is None:
-        raise BadRequest("missing probe_asn")
-
+    probe_cc = validate_probe_cc_query_param()
+    probe_asn = validate_probe_asn_query_param()
     probe_asn = int(probe_asn.replace("AS", ""))
-    where_clause = [
-        sql.text("test_day >= current_date - interval '31 day'"),
-        sql.text("probe_cc = :probe_cc"),
-        sql.text("probe_asn = :probe_asn"),
-    ]
-    query_params = {"probe_cc": probe_cc, "probe_asn": probe_asn}
 
-    row = current_app.db_session.execute(
-        select([sql.text("COUNT(DISTINCT input)")])
-        .where(and_(*where_clause))
-        .select_from(sql.table("ooexpl_wc_input_counts")),
-        query_params,
-    ).fetchone()
-    total_count = row[0]
-
-    s = (
-        select(
-            [
-                sql.text("input"),
-                sql.text("SUM(anomaly_count) as anomaly_count"),
-                sql.text("SUM(confirmed_count) as confirmed_count"),
-                sql.text("SUM(failure_count) as failure_count"),
-                sql.text("SUM(total_count) as total_count"),
-            ]
-        )
-        .where(and_(*where_clause))
-        .group_by(sql.text("input"))
-        .order_by(
-            sql.text(
-                "confirmed_count DESC, total_count DESC, anomaly_count DESC, input ASC"
-            )
-        )
-        .limit(int(limit))
-        .offset(int(offset))
-        .select_from(sql.table("ooexpl_wc_input_counts"))
+    # Count how many distinct inputs we have in this CC / ASN / period
+    s = sql.text(
+        """SELECT COUNT(DISTINCT(input)) as input_count
+        FROM counters
+        WHERE measurement_start_day >= CURRENT_DATE - interval '31 day'
+        AND measurement_start_day < CURRENT_DATE
+        AND test_name = 'web_connectivity'
+        AND probe_cc = :probe_cc
+        AND probe_asn = :probe_asn
+    """
     )
+    q = current_app.db_session.execute(s, dict(probe_cc=probe_cc, probe_asn=probe_asn))
+    total_count = q.fetchone().input_count
 
+    # Group msmts by CC / ASN / period  with LIMIT and OFFSET
+    s = sql.text(
+        """SELECT
+        input,
+        COALESCE(SUM(anomaly_count), 0) as anomaly_count,
+        COALESCE(SUM(confirmed_count), 0) as confirmed_count,
+        COALESCE(SUM(failure_count), 0) as failure_count,
+        COALESCE(SUM(measurement_count), 0) as total_count
+        FROM counters
+        WHERE measurement_start_day >= current_date - interval '31 day'
+        AND measurement_start_day < current_date
+        AND test_name = 'web_connectivity'
+        AND probe_cc =  :probe_cc
+        AND probe_asn = :probe_asn
+        GROUP BY input
+        ORDER BY confirmed_count DESC, SUM(measurement_count) DESC,
+                 anomaly_count DESC, input ASC
+        LIMIT :limit
+        OFFSET :offset
+        """
+    )
+    q = current_app.db_session.execute(
+        s,
+        {
+            "probe_cc": probe_cc,
+            "probe_asn": probe_asn,
+            "limit": limit,
+            "offset": offset,
+        },
+    )
+    results = [dict(r) for r in q]
     current_page = math.ceil(offset / limit) + 1
     metadata = {
         "offset": offset,
@@ -517,74 +495,81 @@ def api_private_website_test_urls():
         "total_count": total_count,
         "next_url": None,
     }
-    results = []
-    q = current_app.db_session.execute(s, query_params)
-    for input, anomaly_count, confirmed_count, failure_count, total_count in q:
-        results.append(
-            {
-                "input": input,
-                "anomaly_count": int(anomaly_count),
-                "confirmed_count": int(confirmed_count),
-                "failure_count": int(failure_count),
-                "total_count": int(total_count),
-            }
-        )
 
+    # Create next_url
     if len(results) >= limit:
-        next_args = request.args.to_dict()
-        next_args["offset"] = "%s" % (offset + limit)
-        next_args["limit"] = "%s" % limit
+        args = dict(
+            limit=limit, offset=offset + limit, probe_asn=probe_asn, probe_cc=probe_cc,
+        )
+        # TODO: remove BASE_URL?
         next_url = urljoin(
-            current_app.config["BASE_URL"],
-            "/api/_/website_urls?%s" % urlencode(next_args),
+            current_app.config["BASE_URL"], "/api/_/website_urls?%s" % urlencode(args),
         )
         metadata["next_url"] = next_url
 
-    return jsonify({"metadata": metadata, "results": results})
+    return cachedjson(1, metadata=metadata, results=results)  # TODO caching
 
 
 @api_private_blueprint.route("/vanilla_tor_stats", methods=["GET"])
 def api_private_vanilla_tor_stats():
-    """TODO
+    """FIXME
     ---
     responses:
       '200':
         description: TODO
     """
-    probe_cc = request.args.get("probe_cc")
-    if probe_cc is None or len(probe_cc) != 2:
-        raise BadRequest("missing probe_cc")
+    probe_cc = validate_probe_cc_query_param()
+
+    ## FIXME
+    j = {
+        "last_tested": "2020-08-30T01:50:43Z",
+        "networks": [
+            {
+                "failure_count": 2,
+                "last_tested": "2020-08-30T01:50:43Z",
+                "probe_asn": 6830,
+                "success_count": 357,
+                "test_runtime_avg": 13.5131730083636,
+                "test_runtime_max": 300.028,
+                "test_runtime_min": 3.33322,
+                "total_count": 359,
+            }
+        ],
+        "notok_networks": 0,
+    }
+    return jsonify(j)
+
     s = sql.text(
         """SELECT
-	vt.probe_asn,
-	MAX(vt.measurement_start_time) as last_tested,
-	AVG(
-	GREATEST(
-		LEAST(vt.test_runtime, vt.timeout),
-		0
-	)) AS test_runtime_avg, -- I do this to overcome some bugs in few measurements that have a very high runtime or a negative runtime
-  MIN(vt.test_runtime) AS test_runtime_min,
-  MAX(vt.test_runtime) AS test_runtime_max,
-  COUNT(CASE WHEN vt.success = true THEN 1 END) as success_count,
-  COUNT(CASE WHEN vt.success = false THEN 1 END) as failure_count,
-  COUNT(*) as total_count
-FROM (
-	SELECT
-	  measurement.msm_no,
-	  report.probe_cc,
-	  report.probe_asn,
-	  measurement.measurement_start_time,
-	  measurement.test_runtime,
-	  vanilla_tor.timeout,
-	  vanilla_tor.success
-	FROM report
-	JOIN measurement ON report.report_no = measurement.report_no
-	JOIN vanilla_tor ON vanilla_tor.msm_no = measurement.msm_no
-	WHERE measurement_start_time > (now() - interval '6 months')
-	AND test_name = 'vanilla_tor'
-	AND probe_cc = :probe_cc
-) as vt
-GROUP BY 1;"""
+        vt.probe_asn,
+        MAX(vt.measurement_start_time) as last_tested,
+        AVG(
+        GREATEST(
+            LEAST(vt.test_runtime, vt.timeout),
+            0
+        )) AS test_runtime_avg, -- I do this to overcome some bugs in few measurements that have a very high runtime or a negative runtime
+    MIN(vt.test_runtime) AS test_runtime_min,
+    MAX(vt.test_runtime) AS test_runtime_max,
+    COUNT(CASE WHEN vt.success = true THEN 1 END) as success_count,
+    COUNT(CASE WHEN vt.success = false THEN 1 END) as failure_count,
+    COUNT(*) as total_count
+    FROM (
+        SELECT
+        measurement.msm_no,
+        report.probe_cc,
+        report.probe_asn,
+        measurement.measurement_start_time,
+        measurement.test_runtime,
+        vanilla_tor.timeout,
+        vanilla_tor.success
+        FROM report
+        JOIN measurement ON report.report_no = measurement.report_no
+        JOIN vanilla_tor ON vanilla_tor.msm_no = measurement.msm_no
+        WHERE measurement_start_time > (now() - interval '6 months')
+        AND test_name = 'vanilla_tor'
+        AND probe_cc = :probe_cc
+    ) as vt
+    GROUP BY 1;"""
     )
 
     # This is the minimum number of tests to consider a result noteworthy
@@ -634,55 +619,58 @@ def api_private_im_networks():
       '200':
         description: TODO
     """
-    probe_cc = request.args.get("probe_cc")
-    if probe_cc is None or len(probe_cc) != 2:
-        raise BadRequest("missing probe_cc")
-
-    test_names = [
-        sql.literal_column("test_name") == tg_name for tg_name in TEST_GROUPS["im"]
-    ]
+    log = current_app.logger
+    probe_cc = validate_probe_cc_query_param()
+    test_names = [sql.literal_column("test_name") == t for t in TEST_GROUPS["im"]]
     s = (
         select(
             [
-                sql.text("SUM(count) as msm_count"),
-                sql.text("MAX(test_day)"),
+                sql.text("SUM(measurement_count) as msm_count"),
+                sql.text("MAX(measurement_start_day) AS last_tested"),
                 sql.text("probe_asn"),
                 sql.text("test_name"),
             ]
         )
         .where(
             and_(
-                sql.text("test_day >= current_date - interval '31 day'"),
+                sql.text("measurement_start_day >= current_date - interval '31 day'"),
                 # We exclude the last day to wait for the pipeline
-                sql.text("test_day < current_date"),
+                sql.text("measurement_start_day < current_date"),
                 sql.text("probe_cc = :probe_cc"),
                 or_(*test_names),
             )
         )
         .group_by(sql.text("test_name, probe_asn"))
+        .select_from(sql.table("counters_asn_noinput"))
         .order_by(sql.text("test_name, msm_count DESC"))
-        .select_from(sql.table("ooexpl_daily_msm_count"))
     )
 
     results = {}
     q = current_app.db_session.execute(s, {"probe_cc": probe_cc})
-    for msm_count, last_tested, probe_asn, test_name in q:
-        results[test_name] = results.get(
-            test_name,
-            {"anomaly_networks": [], "ok_networks": [], "last_tested": last_tested},
+    for r in q:
+        e = results.get(
+            r.test_name,
+            {"anomaly_networks": [], "ok_networks": [], "last_tested": r.last_tested},
         )
-        results[test_name]["ok_networks"].append(
+        e["ok_networks"].append(
             {
-                "asn": probe_asn,
+                "asn": r.probe_asn,
                 "name": "",
-                "total_count": msm_count,
-                "last_tested": last_tested,
+                "total_count": r.msm_count,
+                "last_tested": r.last_tested,
             }
         )
-        if results[test_name]["last_tested"] < last_tested:
-            results[test_name]["last_tested"] = last_tested
+        if e["last_tested"] < r.last_tested:
+            e["last_tested"] = r.last_tested
+        results[r.test_name] = e
 
-    return jsonify(results)
+    return cachedjson(1, **results)  # TODO caching
+
+
+def isomid(d) -> str:
+    """Returns 2020-08-01T00:00:00+00:00
+    """
+    return f"{d}T00:00:00+00:00"
 
 
 @api_private_blueprint.route("/im_stats", methods=["GET"])
@@ -697,40 +685,23 @@ def api_private_im_stats():
     if not test_name or test_name not in TEST_GROUPS["im"]:
         raise BadRequest("invalid test_name")
 
-    probe_cc = request.args.get("probe_cc")
-    if probe_cc is None or len(probe_cc) != 2:
-        raise BadRequest("missing probe_cc")
-
-    probe_asn = request.args.get("probe_asn")
-    if probe_asn is None:
-        raise BadRequest("missing probe_asn")
+    probe_cc = validate_probe_cc_query_param()
+    probe_asn = validate_probe_asn_query_param()
     probe_asn = int(probe_asn.replace("AS", ""))
 
     s = sql.text(
-        """SELECT COALESCE(count, 0), d.test_day
-FROM (
-(
-	SELECT
-	date_trunc('day', (current_date - offs)) AS test_day
-	FROM generate_series(0, 31, 1) AS offs
-) d
-LEFT OUTER JOIN
-(
-	SELECT
-	SUM(count) as count,
-	test_day
-	FROM ooexpl_daily_msm_count
-	WHERE
-    probe_cc = :probe_cc
-    AND test_name = :test_name
-    AND probe_asn = :probe_asn
-	AND test_day >= current_date - interval '31 day'
-	AND test_day < current_date
-	GROUP BY test_day
-) m
-ON d.test_day = m.test_day
-)
-ORDER BY test_day;"""
+        """SELECT
+        SUM(measurement_count) as total_count,
+        measurement_start_day
+        FROM counters_asn_noinput
+        WHERE probe_cc = :probe_cc
+        AND test_name = :test_name
+        AND probe_asn = :probe_asn
+        AND measurement_start_day >= current_date - interval '31 day'
+        AND measurement_start_day < current_date
+        GROUP BY measurement_start_day
+        ORDER BY measurement_start_day
+    """
     )
 
     query_params = {
@@ -739,172 +710,115 @@ ORDER BY test_day;"""
         "test_name": test_name,
     }
 
-    results = []
     q = current_app.db_session.execute(s, query_params)
-    for count, test_day in q:
-        results.append(
-            {"test_day": test_day, "total_count": count, "anomaly_count": None}
-        )
 
-    return jsonify({"results": results})
+    tmp = {r.measurement_start_day: r for r in q}
+    results = []
+    days = [date.today() + timedelta(days=(d - 31)) for d in range(32)]
+    for d in days:
+        if d in tmp:
+            e = {
+                "test_day": isomid(tmp[d].measurement_start_day),
+                "total_count": tmp[d].total_count,
+            }
+        else:
+            e = {"test_day": isomid(d), "total_count": 0}
+
+        e["anomaly_count"] = None
+        results.append(e)
+
+    return cachedjson(1, results=results)  # TODO caching
 
 
 @api_private_blueprint.route("/network_stats", methods=["GET"])
 def api_private_network_stats():
-    """TODO
+    """Network speed statistics - not implemented
     ---
     responses:
       '200':
         description: TODO
     """
-    probe_cc = request.args.get("probe_cc")
-    if probe_cc is None or len(probe_cc) != 2:
-        raise BadRequest("missing probe_cc")
+    # TODO: implement the stats from NDT in fastpath and then here
+    probe_cc = validate_probe_cc_query_param()
 
-    limit = int(request.args.get("limit", 10))
-    if limit <= 0:
-        limit = 10
-    offset = int(request.args.get("offset", 0))
-
-    row = current_app.db_session.execute(
-        select([sql.text("COUNT(DISTINCT probe_asn)")])
-        .where(and_(sql.text("probe_cc = :probe_cc")))
-        .select_from(sql.table("ooexpl_netinfo")),
-        {"probe_cc": probe_cc},
-    ).fetchone()
-    total_count = row[0]
-
-    s = (
-        select(
-            [
-                sql.text("client_asn_name"),
-                sql.text("probe_asn"),
-                sql.text("count"),
-                sql.text("download_speed_mbps_median"),
-                sql.text("upload_speed_mbps_median"),
-                sql.text("rtt_avg"),
-            ]
-        )
-        .where(and_(sql.text("probe_cc = :probe_cc")))
-        .order_by(sql.text("count DESC"))
-        .limit(limit)
-        .offset(offset)
-        .select_from(sql.table("ooexpl_netinfo"))
+    return cachedjson(
+        24,
+        {
+            "metadata": {
+                "current_page": 1,
+                "limit": 10,
+                "next_url": None,
+                "offset": 0,
+                "total_count": 0,
+            },
+            "results": [],
+        },
     )
 
-    current_page = math.ceil(offset / limit) + 1
-    metadata = {
-        "offset": offset,
-        "limit": limit,
-        "current_page": current_page,
-        "total_count": total_count,
-        "next_url": None,
-    }
-    results = []
-    q = current_app.db_session.execute(s, {"probe_cc": probe_cc})
-    for asn_name, asn, msm_count, download, upload, rtt in q:
-        results.append(
-            {
-                "asn_name": asn_name,
-                "asn": asn,
-                "msm_count": msm_count,
-                "download_speed_mbps_median": download,
-                "upload_speed_mbps_median": upload,
-                "rtt_avg": rtt,
-                "middlebox_detected": None,
-            }
-        )
-
-    if len(results) >= limit:
-        next_args = request.args.to_dict()
-        next_args["offset"] = "%s" % (offset + limit)
-        next_args["limit"] = "%s" % limit
-        next_url = urljoin(
-            current_app.config["BASE_URL"],
-            "/api/_/network_stats?%s" % urlencode(next_args),
-        )
-        metadata["next_url"] = next_url
-
-    return jsonify({"metadata": metadata, "results": results})
+    # Sample:
+    # {
+    #     "metadata": {
+    #         "current_page": 1,
+    #         "limit": 10,
+    #         "next_url": "https://api.ooni.io/api/_/network_stats?probe_cc=IT&offset=10&limit=10",
+    #         "offset": 0,
+    #         "total_count": 238,
+    #     },
+    #     "results": [
+    #         {
+    #             "asn": 3269,
+    #             "asn_name": "ASN-IBSNAZ",
+    #             "download_speed_mbps_median": 12.154,
+    #             "middlebox_detected": null,
+    #             "msm_count": 24596.0,
+    #             "rtt_avg": 87.826,
+    #             "upload_speed_mbps_median": 2.279,
+    #         },
+    #     ],
+    # }
 
 
 @api_private_blueprint.route("/country_overview", methods=["GET"])
 def api_private_country_overview():
-    """TODO
+    """Country-specific overview
     ---
     responses:
       '200':
-        description: TODO
+        description: {
+        "first_bucket_date":"2012-12-01",
+        "measurement_count":6659891,
+        "network_count":333}
     """
-    probe_cc = request.args.get("probe_cc")
-    if probe_cc is None or len(probe_cc) != 2:
-        raise BadRequest("missing or incorrect probe_cc")
+    # TODO: add circumvention_tools_blocked im_apps_blocked
+    # middlebox_detected_networks websites_confirmed_blocked
+    probe_cc = validate_probe_cc_query_param()
 
-    # FIXME
-    return jsonify(
-        {
-            "circumvention_tools_blocked": None,
-            "first_bucket_date": "2013-10-29",
-            "im_apps_blocked": None,
-            "measurement_count": 6652155,
-            "middlebox_detected_networks": None,
-            "network_count": 333,
-            "websites_confirmed_blocked": 3,
-        }
+    # OLAP-use-case
+    #  CREATE MATERIALIZED VIEW country_stats AS
+    #  SELECT
+    #      MIN(measurement_start_day) AS first_bucket_date,
+    #      COUNT(DISTINCT probe_asn) AS network_count,
+    #      SUM(measurement_count) AS measurement_count,
+    #      probe_cc
+    #  FROM counters
+    #  GROUP BY probe_cc;
+    cols = [sql.text("measurement_count"), sql.text("network_count")]
+    where = sql.text("probe_cc = :probe_cc")
+    q = select(cols).where(where).select_from(sql.table("country_stats"))
+    q = current_app.db_session.execute(q, {"probe_cc": probe_cc})
+    r = q.fetchone()
+    # FIXME: use first_bucket_date,
+    # FIXME: websites_confirmed_blocked
+    return cachedjson(
+        24,
+        circumvention_tools_blocked=None,
+        first_bucket_date="2013-01-01",
+        im_apps_blocked=None,
+        measurement_count=r.measurement_count,
+        middlebox_detected_networks=None,
+        network_count=r.network_count,
+        websites_confirmed_blocked=0,
     )
-
-    # row = current_app.db_session.execute(
-    #     select([sql.text("COUNT(DISTINCT input)")])
-    #     .where(
-    #         and_(
-    #             sql.text("confirmed_count > 0"),
-    #             sql.text("probe_cc = :probe_cc"),
-    #             sql.text("test_day >= current_date - interval '31 day'"),
-    #         )
-    #     )
-    #     .select_from(sql.table("ooexpl_wc_input_counts")),
-    #     {"probe_cc": probe_cc},
-    # ).fetchone()
-    # websites_confirmed_blocked = row[0]
-    #
-    # "COUNT(DISTINCT input)   confirmed_count > 0"
-    # probe_cc = :probe_cc"),
-    # test_day >= current_date - interval '31 day'"),
-    # ).fetchone()
-    # websites_confirmed_blocked = row[0]
-
-    # row = current_app.db_session.execute(
-    #    select([sql.text("SUM(count)"), sql.text("COUNT(DISTINCT probe_asn)")])
-    #    .where(and_(sql.text("probe_cc = :probe_cc")))
-    #    .select_from(sql.table("ooexpl_bucket_msm_count")),
-    #    {"probe_cc": probe_cc},
-    # ).fetchone()
-    # measurement_count = row[0]
-    # network_count = row[1]
-
-    # row = current_app.db_session.execute(
-    #    select([sql.text("bucket_date")])
-    #    .where(and_(sql.text("probe_cc = :probe_cc")))
-    #    .select_from(sql.table("ooexpl_bucket_msm_count"))
-    #    .order_by(sql.text("bucket_date ASC"))
-    #    .limit(1),
-    #    {"probe_cc": probe_cc},
-    # ).fetchone()
-    # first_bucket_date = None
-    # if row:
-    #    first_bucket_date = row[0]
-
-    # return jsonify(
-    #    {
-    #        "websites_confirmed_blocked": websites_confirmed_blocked,
-    #        "middlebox_detected_networks": None,
-    #        "im_apps_blocked": None,
-    #        "circumvention_tools_blocked": None,
-    #        "measurement_count": measurement_count,
-    #        "network_count": network_count,
-    #        "first_bucket_date": first_bucket_date,
-    #    }
-    # )
 
 
 @api_private_blueprint.route("/global_overview", methods=["GET"])
@@ -916,6 +830,13 @@ def api_private_global_overview():
       '200':
         description: JSON struct TODO
     """
+    # OLAP-use-case
+    #  CREATE MATERIALIZED VIEW global_stats AS
+    #  SELECT
+    #      COUNT(DISTINCT probe_asn) AS network_count,
+    #      COUNT(DISTINCT probe_cc) AS country_count,
+    #      SUM(measurement_count) AS measurement_count
+    #  FROM counters;
     q = select([sql.text("*")]).select_from(sql.table("global_stats"))
     r = current_app.db_session.execute(q).fetchone()
     return cachedjson(24, **dict(r))
@@ -930,6 +851,7 @@ def api_private_global_by_month():
       '200':
         description: JSON struct TODO
     """
+    # OLAP-use-case
     q = select(
         [
             sql.text("countries_by_month"),
