@@ -100,59 +100,59 @@ def api_private_countries_by_month():
 
 
 # FIXME UNUSED @api_private_blueprint.route("/runs_by_month")
-def api_private_runs_by_month():
-    """FIXME
-    ---
-    responses:
-      '200':
-        description: TODO
-    """
-    raise NotImplementedError
-    # The query takes ~6s on local SSD @ AMS on 2018-04-04.
-    # It was taking ~20s when it was fetching all the table from DB and doing grouping locally.
-    # TODO: use-count-table
-    # FIXME: support fastpath
-    now = datetime.now()
-    end_date = datetime(now.year, now.month, 1)
-    start_date = end_date - relativedelta(months=24)
-    rawsql = """SELECT
-        date_trunc('month', report.test_start_time) AS test_start_month,
-        count(*) AS count_1
-        FROM report
-        WHERE report.test_start_time >= :start_date
-        AND report.test_start_time < :end_date
-        GROUP BY test_start_month
-    """
-    params = dict(start_date=start_date, end_date=end_date)
-    q = current_app.db_session.execute(rawsql, params)
-    delta = relativedelta(months=+1, days=-1)
-    result = [
-        {"date": (bkt + delta).strftime("%Y-%m-%d"), "value": value}
-        for bkt, value in sorted(q.fetchall())
-    ]
-    return jsonify(result)
-
-
-# FIXME UNUSED @api_private_blueprint.route("/reports_per_day")
-def api_private_reports_per_day():
-    """TODO
-    ---
-    responses:
-      '200':
-        description: TODO
-    """
-    # TODO: use-count-table
-    # FIXME: support fastpath
-    rawsql = """SELECT
-        count(date_trunc('day', report.test_start_time)) AS count_1,
-        date_trunc('day', report.test_start_time) AS date_trunc_2
-        FROM report
-        GROUP BY date_trunc('day', report.test_start_time)
-        ORDER BY date_trunc('day', report.test_start_time)
-    """
-    q = current_app.db_session.execute(rawsql)
-    result = [{"count": count, "date": date.strftime("%Y-%m-%d")} for count, date in q]
-    return jsonify(result)
+# def api_private_runs_by_month():
+#    """FIXME
+#    ---
+#    responses:
+#      '200':
+#        description: TODO
+#    """
+#    raise NotImplementedError
+#    # The query takes ~6s on local SSD @ AMS on 2018-04-04.
+#    # It was taking ~20s when it was fetching all the table from DB and doing grouping locally.
+#    # TODO: use-count-table
+#    # FIXME: support fastpath
+#    now = datetime.now()
+#    end_date = datetime(now.year, now.month, 1)
+#    start_date = end_date - relativedelta(months=24)
+#    rawsql = """SELECT
+#        date_trunc('month', report.test_start_time) AS test_start_month,
+#        count(*) AS count_1
+#        FROM report
+#        WHERE report.test_start_time >= :start_date
+#        AND report.test_start_time < :end_date
+#        GROUP BY test_start_month
+#    """
+#    params = dict(start_date=start_date, end_date=end_date)
+#    q = current_app.db_session.execute(rawsql, params)
+#    delta = relativedelta(months=+1, days=-1)
+#    result = [
+#        {"date": (bkt + delta).strftime("%Y-%m-%d"), "value": value}
+#        for bkt, value in sorted(q.fetchall())
+#    ]
+#    return jsonify(result)
+#
+#
+## FIXME UNUSED @api_private_blueprint.route("/reports_per_day")
+# def api_private_reports_per_day():
+#    """TODO
+#    ---
+#    responses:
+#      '200':
+#        description: TODO
+#    """
+#    # TODO: use-count-table
+#    # FIXME: support fastpath
+#    rawsql = """SELECT
+#        count(date_trunc('day', report.test_start_time)) AS count_1,
+#        date_trunc('day', report.test_start_time) AS date_trunc_2
+#        FROM report
+#        GROUP BY date_trunc('day', report.test_start_time)
+#        ORDER BY date_trunc('day', report.test_start_time)
+#    """
+#    q = current_app.db_session.execute(rawsql)
+#    result = [{"count": count, "date": date.strftime("%Y-%m-%d")} for count, date in q]
+#    return jsonify(result)
 
 
 @api_private_blueprint.route("/test_names", methods=["GET"])
@@ -229,7 +229,7 @@ def check_report_id():
     s = sql.text("SELECT 1 FROM fastpath WHERE report_id = :rid LIMIT 1")
     try:
         q = current_app.db_session.execute(s, dict(rid=report_id))
-        found = q.fetchone()[0] is not None
+        found = q.fetchone() is not None
         return cachedjson(5 / 3600, v=0, found=found)  # cache 5min
 
     except Exception as e:
@@ -512,7 +512,7 @@ def api_private_website_test_urls():
 
 @api_private_blueprint.route("/vanilla_tor_stats", methods=["GET"])
 def api_private_vanilla_tor_stats():
-    """FIXME
+    """Tor statistics over ASN for a given CC
     ---
     responses:
       '200':
@@ -520,95 +520,43 @@ def api_private_vanilla_tor_stats():
     """
     probe_cc = validate_probe_cc_query_param()
 
-    ## FIXME
-    j = {
-        "last_tested": "2020-08-30T01:50:43Z",
-        "networks": [
-            {
-                "failure_count": 2,
-                "last_tested": "2020-08-30T01:50:43Z",
-                "probe_asn": 6830,
-                "success_count": 357,
-                "test_runtime_avg": 13.5131730083636,
-                "test_runtime_max": 300.028,
-                "test_runtime_min": 3.33322,
-                "total_count": 359,
-            }
-        ],
-        "notok_networks": 0,
-    }
-    return jsonify(j)
-
     s = sql.text(
         """SELECT
-        vt.probe_asn,
-        MAX(vt.measurement_start_time) as last_tested,
-        AVG(
-        GREATEST(
-            LEAST(vt.test_runtime, vt.timeout),
-            0
-        )) AS test_runtime_avg, -- I do this to overcome some bugs in few measurements that have a very high runtime or a negative runtime
-    MIN(vt.test_runtime) AS test_runtime_min,
-    MAX(vt.test_runtime) AS test_runtime_max,
-    COUNT(CASE WHEN vt.success = true THEN 1 END) as success_count,
-    COUNT(CASE WHEN vt.success = false THEN 1 END) as failure_count,
-    COUNT(*) as total_count
-    FROM (
-        SELECT
-        measurement.msm_no,
-        report.probe_cc,
-        report.probe_asn,
-        measurement.measurement_start_time,
-        measurement.test_runtime,
-        vanilla_tor.timeout,
-        vanilla_tor.success
-        FROM report
-        JOIN measurement ON report.report_no = measurement.report_no
-        JOIN vanilla_tor ON vanilla_tor.msm_no = measurement.msm_no
-        WHERE measurement_start_time > (now() - interval '6 months')
-        AND test_name = 'vanilla_tor'
-        AND probe_cc = :probe_cc
-    ) as vt
-    GROUP BY 1;"""
+        SUM(failure_count) as failure_count,
+        MAX(measurement_start_day) AS last_tested,
+        probe_asn,
+        SUM(anomaly_count) as anomaly_count,
+        SUM(measurement_count) as total_count
+        FROM counters_asn_noinput
+        WHERE measurement_start_day > (current_date - interval '6 months')
+        AND probe_cc =  :probe_cc
+        GROUP BY probe_asn
+    """
     )
-
-    # This is the minimum number of tests to consider a result noteworthy
-    MIN_TESTS = 5
-    ANOMALY_PERC = 0.6
-
-    results = {"networks": [], "notok_networks": 0}
     q = current_app.db_session.execute(s, {"probe_cc": probe_cc})
-    for row in q:
-        (
-            probe_asn,
-            last_tested,
-            test_runtime_avg,
-            test_runtime_min,
-            test_runtime_max,
-            success_count,
-            failure_count,
-            total_count,
-        ) = row
 
-        results["last_tested"] = results.get("last_tested", last_tested)
-        if results["last_tested"] < last_tested:
-            results["last_tested"] = last_tested
-        if total_count > 5 and float(success_count) / float(total_count) < ANOMALY_PERC:
-            results["notok_networks"] += 1
-
-        results["networks"].append(
+    nets = []
+    blocked = 0
+    for n in q:
+        total_count = n.total_count or 0
+        success_count = total_count - (n.anomaly_count or 0)
+        nets.append(
             {
-                "probe_asn": probe_asn,
-                "last_tested": last_tested,
-                "test_runtime_avg": test_runtime_avg,
-                "test_runtime_min": test_runtime_min,
-                "test_runtime_max": test_runtime_max,
+                "failure_count": n.failure_count or 0,
+                "last_tested": n.last_tested,
+                "probe_asn": n.probe_asn,
                 "success_count": success_count,
-                "failure_count": failure_count,
+                "test_runtime_avg": None,
+                "test_runtime_max": None,
+                "test_runtime_min": None,
                 "total_count": total_count,
             }
         )
-    return jsonify(results)
+        if total_count > 5 and float(success_count) / float(total_count) < 0.6:
+            blocked += 1
+
+    lt = max(n["last_tested"] for n in nets)
+    return cachedjson(0, networks=nets, notok_networks=blocked, last_tested=lt)
 
 
 @api_private_blueprint.route("/im_networks", methods=["GET"])
@@ -774,6 +722,7 @@ def api_private_network_stats():
     #             "rtt_avg": 87.826,
     #             "upload_speed_mbps_median": 2.279,
     #         },
+    #         ...
     #     ],
     # }
 
@@ -792,32 +741,25 @@ def api_private_country_overview():
     # TODO: add circumvention_tools_blocked im_apps_blocked
     # middlebox_detected_networks websites_confirmed_blocked
     probe_cc = validate_probe_cc_query_param()
-
     # OLAP-use-case
-    #  CREATE MATERIALIZED VIEW country_stats AS
-    #  SELECT
-    #      MIN(measurement_start_day) AS first_bucket_date,
-    #      COUNT(DISTINCT probe_asn) AS network_count,
-    #      SUM(measurement_count) AS measurement_count,
-    #      probe_cc
-    #  FROM counters
-    #  GROUP BY probe_cc;
-    cols = [sql.text("measurement_count"), sql.text("network_count")]
-    where = sql.text("probe_cc = :probe_cc")
-    q = select(cols).where(where).select_from(sql.table("country_stats"))
-    q = current_app.db_session.execute(q, {"probe_cc": probe_cc})
+    s = sql.text(
+        """SELECT
+        MIN(measurement_start_day) AS first_bucket_date,
+        SUM(measurement_count) AS measurement_count,
+        COUNT(DISTINCT probe_asn) AS network_count
+        FROM counters_asn_noinput
+        WHERE probe_cc = :probe_cc
+    """
+    )
+    q = current_app.db_session.execute(s, {"probe_cc": probe_cc})
     r = q.fetchone()
-    # FIXME: use first_bucket_date,
+    # NOTE: we are hardcoding a fixed first_bucket_date
     # FIXME: websites_confirmed_blocked
     return cachedjson(
         24,
-        circumvention_tools_blocked=None,
-        first_bucket_date="2013-01-01",
-        im_apps_blocked=None,
+        first_bucket_date=r.first_bucket_date,
         measurement_count=r.measurement_count,
-        middlebox_detected_networks=None,
         network_count=r.network_count,
-        websites_confirmed_blocked=0,
     )
 
 

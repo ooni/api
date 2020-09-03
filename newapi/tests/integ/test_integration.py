@@ -500,7 +500,6 @@ def test_list_measurements_slow_order_by_group_3(f1, f2, log, client):
     response = api(client, url)
 
 
-@pytest.mark.skip(reason="FIXME")
 def test_list_measurements_duplicate(client):
     # The API is now returning only one result
     rid = "20190720T201845Z_AS3352_Rmagvbg0ufqt8Q0kZBa5Hb0gIzfIBCgHb2PTw0VMLIuHn7mmZ4"
@@ -1026,7 +1025,7 @@ def test_private_api_countries_by_month(client):
     assert r["value"] < 1000
 
 
-@pytest.mark.skip(reason="FIXME")
+@pytest.mark.skip(reason="deprecated and removed")
 def test_private_api_runs_by_month(client):
     url = "runs_by_month"
     response = privapi(client, url)
@@ -1036,7 +1035,7 @@ def test_private_api_runs_by_month(client):
     assert sum(i["value"] for i in response) > 6_000_000
 
 
-@pytest.mark.skip(reason="FIXME")
+@pytest.mark.skip(reason="deprecated and removed")
 def test_private_api_reports_per_day(client):
     url = "reports_per_day"
     response = privapi(client, url)
@@ -1049,7 +1048,6 @@ def test_private_api_reports_per_day(client):
 def test_private_api_test_names(client, log):
     url = "test_names"
     response = privapi(client, url)
-    print(response)
     assert response == {
         "test_names": [
             {"id": "bridge_reachability", "name": "Bridge Reachability"},
@@ -1075,8 +1073,6 @@ def test_private_api_test_names(client, log):
 
 
 def test_private_api_countries_total(client, log):
-    # was: {"alpha_2": "AD", "count": 878, "name": "Andorra"},
-    # in the new API the name was dropped
     url = "countries"
     response = privapi(client, url)
     assert "countries" in response
@@ -1084,14 +1080,20 @@ def test_private_api_countries_total(client, log):
     a = response["countries"][0]
     assert a["alpha_2"] == "AD"
     assert a["count"] > 100
+    assert a["name"] == "Andorra"
 
 
 def test_private_api_test_coverage(client, log):
     url = "test_coverage?probe_cc=US"
     resp = privapi(client, url)
-    # assert len(resp["network_coverage"]) > 10
     assert len(resp["test_coverage"]) > 10
-    # assert sorted(resp["network_coverage"][0]) == ["count", "test_day"]
+    assert sorted(resp["test_coverage"][0]) == ["count", "test_day", "test_group"]
+
+
+def test_private_api_test_coverage_with_groups(client, log):
+    url = "test_coverage?probe_cc=US&test_groups=websites"
+    resp = privapi(client, url)
+    assert len(resp["test_coverage"]) > 10
     assert sorted(resp["test_coverage"][0]) == ["count", "test_day", "test_group"]
 
 
@@ -1104,18 +1106,14 @@ def test_private_api_website_networks(client, log):
 def test_private_api_website_stats(client, log):
     url = "website_stats?probe_cc=DE&probe_asn=3320&input=http:%2F%2Fwww.backtrack-linux.org%2F"
     resp = privapi(client, url)
-    assert 0, resp
-    {
-        "results": [
-            {
-                "anomaly_count": 0,
-                "confirmed_count": 0,
-                "failure_count": 0,
-                "test_day": "2020-07-29T00:00:00+00:00",
-                "total_count": 2,
-            },
-        ]
-    }
+    assert len(resp["results"]) > 2
+    assert sorted(resp["results"][0].keys()) == [
+        "anomaly_count",
+        "confirmed_count",
+        "failure_count",
+        "test_day",
+        "total_count",
+    ]
 
 
 def test_private_api_website_urls(client, log):
@@ -1134,24 +1132,20 @@ def test_private_api_website_urls(client, log):
 
 
 def test_private_api_vanilla_tor_stats(client):
-    url = "vanilla_tor_stats"
+    url = "vanilla_tor_stats?probe_cc=US"
     resp = privapi(client, url)
-    assert resp == {
-        "last_tested": "2020-08-30T01:50:43Z",
-        "networks": [
-            {
-                "failure_count": 2,
-                "last_tested": "2020-08-30T01:50:43Z",
-                "probe_asn": 6830,
-                "success_count": 357,
-                "test_runtime_avg": 13.5131730083636,
-                "test_runtime_max": 300.028,
-                "test_runtime_min": 3.33322,
-                "total_count": 359,
-            }
-        ],
-        "notok_networks": 0,
-    }
+    assert resp["notok_networks"] >= 0
+    assert len(resp["networks"]) > 10
+    assert sorted(resp["networks"][0].keys()) == [
+        "failure_count",
+        "last_tested",
+        "probe_asn",
+        "success_count",
+        "test_runtime_avg",
+        "test_runtime_max",
+        "test_runtime_min",
+        "total_count",
+    ]
 
 
 def test_private_api_im_networks(client):
@@ -1174,6 +1168,7 @@ def test_private_api_im_stats(client):
 
 
 def test_private_api_network_stats(client):
+    # TODO: the stats are not implemented
     url = "network_stats?probe_cc=GB"
     response = privapi(client, url)
     assert response == {
@@ -1188,30 +1183,12 @@ def test_private_api_network_stats(client):
     }
 
 
-@pytest.mark.skip(reason="FIXME")
 def test_private_api_country_overview(client):
-    url = "country_overview?probe_cc=IT"
-    response = privapi(client, url)
-    assert response == {
-        "circumvention_tools_blocked": None,
-        "first_bucket_date": "2013-10-29",
-        "im_apps_blocked": None,
-        "measurement_count": 6652155,
-        "middlebox_detected_networks": None,
-        "network_count": 333,
-        "websites_confirmed_blocked": 3,
-    }
-
-
-def test_private_api_country_overview_2(client):
-    url = "country_overview?probe_cc=DE"
-    response = privapi(client, url)
-    # FIXME: compare  numbers with amsmetadb
-    assert response == {
-        "first_bucket_date": "2013-01-01",
-        "measurement_count": 12889650,
-        "network_count": 462,
-    }
+    url = "country_overview?probe_cc=US"
+    resp = privapi(client, url)
+    assert "201" in resp["first_bucket_date"]
+    assert resp["measurement_count"] > 10000
+    assert resp["network_count"] > 100
 
 
 def test_private_api_global_overview(client):
@@ -1231,6 +1208,11 @@ def test_private_api_global_overview_by_month(client):
     assert "value" in response["countries_by_month"][13]
     assert "date" in response["measurements_by_month"][16]
     assert "value" in response["measurements_by_month"][17]
+
+
+@pytest.mark.skip(reason="cannot be tested")
+def test_private_api_quotas_summary(client):
+    resp = privapi(client, "quotas_summary")
 
 
 def test_private_api_check_report_id(client, log):
