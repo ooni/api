@@ -12,7 +12,6 @@ from urllib.parse import urljoin, urlencode
 
 import math
 
-
 from flask import Blueprint, current_app, request, abort
 from flask.json import jsonify
 
@@ -22,6 +21,7 @@ from werkzeug.exceptions import BadRequest
 
 from ooniapi.models import TEST_GROUPS, get_test_group_case
 from ooniapi.countries import lookup_country
+from ooniapi.utils import cachedjson
 
 # The private API is exposed under the prefix /api/_
 # e.g. https://api.ooni.io/api/_/test_names
@@ -34,13 +34,6 @@ api_private_blueprint = Blueprint("api_private", "measurements")
 def daterange(start_date, end_date):
     for n in range(int((end_date - start_date).days)):
         yield start_date + timedelta(n)
-
-
-def cachedjson(interval_hours: int, *a, **kw):
-    """Jsonify and add cache expiration"""
-    resp = jsonify(*a, **kw)
-    resp.cache_control.max_age = interval_hours * 3600
-    return resp
 
 
 def validate_probe_cc_query_param():
@@ -803,9 +796,9 @@ def api_private_global_by_month():
         ]
     ).select_from(sql.table("global_by_month"))
     rows = current_app.db_session.execute(q).fetchall()
-    n = [{"date": r[3], "value": r[0]} for r in rows]
-    c = [{"date": r[3], "value": r[1]} for r in rows]
-    m = [{"date": r[3], "value": r[2]} for r in rows]
+    n = [{"date": r[3], "value": r["networks_by_month"]} for r in rows]
+    c = [{"date": r[3], "value": r["countries_by_month"]} for r in rows]
+    m = [{"date": r[3], "value": r["measurements_by_month"]} for r in rows]
     return cachedjson(
         24, networks_by_month=n, countries_by_month=c, measurements_by_month=m
     )
