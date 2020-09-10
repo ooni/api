@@ -39,6 +39,20 @@ def getjson(client, url):
     return response.json
 
 
+def post(client, url, data):
+    response = client.post(url, data=data)
+    assert response.status_code == 200
+    assert response.is_json
+    return response.json
+
+
+def postj(client, url, **kw):
+    response = client.post(url, json=kw)
+    assert response.status_code == 200
+    assert response.is_json
+    return response.json
+
+
 def test_index(client):
     c = gethtml(client, "/")
     assert "Welcome to" in c
@@ -47,6 +61,7 @@ def test_index(client):
 # # Follow the order in ooniapi/probe_services.py
 
 
+@pytest.mark.skip(reason="TODO")
 def test_(client):
     c = getjson(client, "/")
     assert True
@@ -57,14 +72,29 @@ def test_collectors(client):
     assert len(c) == 6
 
 
+@pytest.mark.skip(reason="TODO")
 def test_(client):
+    print(dir(client))
     c = post(client, "/api/v1/login")
     assert True
 
 
-def test_(client):
-    c = post(client, "/api/v1/register")
-    assert True
+def test_register(client):
+    j = {
+        "password": "HLdywVhzVCNqLvHCfmnMhIXqGmUFMTuYjmuGZhNlRTeIyvxeQTnjVJsiRkutHCSw",
+        "platform": "miniooni",
+        "probe_asn": "AS0",
+        "probe_cc": "ZZ",
+        "software_name": "miniooni",
+        "software_version": "0.1.0-dev",
+        "supported_tests": ["web_connectivity"],
+    }
+    c = postj(client, "/api/v1/register", **j)
+    print(c)
+    assert 0
+
+
+# https://ps1.ooni.io/api/v1/login
 
 
 def test_test_helpers(client):
@@ -72,41 +102,64 @@ def test_test_helpers(client):
     assert len(c) == 6
 
 
+@pytest.mark.skip(reason="TODO")
 def test_psiphon(client):
     c = getjson(client, "/api/v1/test-list/psiphon-config")
     assert True
 
 
+@pytest.mark.skip(reason="TODO")
 def test_tor_targets(client):
     c = getjson(client, "/api/v1/test-list/tor-targets")
     assert True
 
 
+@pytest.mark.skip(reason="TODO")
 def test_(client):
     c = getjson(client, "/api/private/v1/wcth")
     assert True
 
 
+@pytest.mark.skip(reason="TODO")
 def test_(client):
     c = getjson(client, "/bouncer/net-tests")
     assert True
 
 
 def test_open_report(client):
-    c = post(client, "/report")
-    assert True
+    j = {
+        "data_format_version": "0.2.0",
+        "format": "json",
+        "probe_asn": "AS34245",
+        "probe_cc": "IE",
+        "software_name": "miniooni",
+        "software_version": "0.17.0-beta",
+        "test_name": "web_connectivity",
+        "test_start_time": "2020-09-09 14:11:11",
+        "test_version": "0.1.0",
+    }
+    c = postj(client, "/report", **j)
+    rid = c.pop("report_id")
+    assert c == {
+        "backend_version": "1.3.5",
+        "supported_formats": ["yaml", "json"],
+    }
+    assert len(rid) == 45, rid
 
 
 def test_upload_msmt(client):
-    c = post(client, "/report/TestReportID")
+    msmt = dict(test_keys={})
+    c = postj(client, "/report/TestReportID", format="json", content=msmt)
+    assert c == {}
 
 
 def test_close_report(client):
-    c = post(client, "/report/TestReportID/close")
-    assert True
+    c = postj(client, "/report/TestReportID/close")
+    assert c == {}
 
 
 # Test-list related tests
+
 
 def test_url_prioritization(client):
     c = getjson(client, "/api/v1/test-list/urls")

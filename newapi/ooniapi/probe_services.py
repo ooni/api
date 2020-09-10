@@ -2,11 +2,12 @@
 OONI Probe Services API
 """
 
+from base64 import b64encode
+from datetime import datetime
+from os import urandom
 from typing import List
-import random
-import time
 
-from flask import Blueprint, current_app, request
+from flask import Blueprint, current_app, request, make_response
 from flask.json import jsonify
 import jwt  # debdeps: python3-jwt
 
@@ -86,30 +87,22 @@ def register():
         schema:
           type: object
           properties:
-            ProbeCC:
+            password:
               type: string
-            ProbeASN:
+            platform:
               type: string
-            Platform:
+            probe_asn:
               type: string
-            SoftwareName:
+            probe_cc:
               type: string
-            SoftwareVersion:
+            software_name:
               type: string
-            SupportedTests:
+            software_version:
+              type: string
+            supported_tests:
               type: array
               items:
                 type: string
-            NetworkType:
-              type: string
-            AvailableBandwidth:
-              type: string
-            Language:
-              type: string
-            Token:
-              type: string
-            Password:
-              type: string
     responses:
       '200':
         description: Registration confirmation
@@ -122,7 +115,11 @@ def register():
                   description: client_id
                   type: string
     """
-    return jsonify({"msg": "not implemented"})  # TODO
+    log = current_app.logger
+    if not request.is_json:
+        return jsonify({"msg": "error: JSON expected!"})
+
+    return jsonify({"client_id": "BOGUS_CLIENT_ID"})  # FIXME
 
 
 # UNUSED
@@ -233,18 +230,80 @@ def bouncer_net_tests():
     return jsonify({"msg": "not implemented"})  # TODO
 
 
+def error(msg, code=400):
+    return make_response(dict(error=msg), code=code)
+
+
 @probe_services_blueprint.route("/report", methods=["POST"])
 def open_report():
     """Probe Services: Open report
     ---
+    parameters:
+      - in: body
+        name: open report data
+        required: true
+        schema:
+          type: object
+          properties:
+            data_format_version:
+              type: string
+            format:
+              type: string
+            probe_asn:
+              type: string
+            probe_cc:
+              type: string
+            software_name:
+              type: string
+            software_version:
+              type: string
+            test_name:
+              type: string
+            test_start_time:
+              type: string
+            test_version:
+              type: string
+    responses:
+      '200':
+        description: Open report confirmation
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                backend_version:
+                  type: string
+                report_id:
+                  type: string
+                supported_formats:
+                  type: array
+                  items:
+                    type: string
     responses:
       '200':
         description: Open a report
     """
-    return jsonify({"msg": "not implemented"})  # TODO
+    log = current_app.logger
+    if not request.is_json:
+        return error("JSON expected")
+
+    log.info("Open report %r", request.json)
+    asn = request.json.get("probe_asn", "AS0")
+    if len(asn) > 8 or len(asn) < 3 or not asn.startswith("AS"):
+        asn = "AS0"
+    cc = request.json.get("probe_cc", "ZZ").upper()
+    if len(cc) != 2:
+        cc = "ZZ"
+    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    cid = "1" # collector id TODO read from conf
+    rand = b64encode(urandom(12), b'oo').decode()
+    rid = f"{ts}_{asn}_n{cid}{cc}{rand}"
+    return jsonify(
+        backend_version="1.3.5", supported_formats=["yaml", "json"], report_id=rid
+    )
 
 
-@probe_services_blueprint.route("/report/<reportID>")
+@probe_services_blueprint.route("/report/<report_id>", methods=["POST"])
 def receive_measurement(report_id):
     """Probe Services: Submit measurement
     ---
@@ -252,11 +311,20 @@ def receive_measurement(report_id):
       '200':
         description: Acknowledge
     """
-    # TODO: forward to fastpath
-    return jsonify({"msg": "not implemented"})  # TODO
+    log = current_app.logger
+    if not request.is_json:
+        return error("JSON expected")
+
+    r = request.json
+    if "format" not in r or "content" not in r:
+        return error("Incorrect format")
+
+    # TODO: save to disk and forward to fastpath
+    # TODO return jsonify(measurement_id = mid)
+    return jsonify()
 
 
-@probe_services_blueprint.route("/report/<reportID>/close", methods=["POST"])
+@probe_services_blueprint.route("/report/<report_id>/close", methods=["POST"])
 def close_report(report_id):
     """Probe Services: Close report
     ---
@@ -264,4 +332,7 @@ def close_report(report_id):
       '200':
         description: Close a report
     """
-    return jsonify({"msg": "not implemented"})  # TODO
+    if not request.is_json:
+        return error("JSON expected")
+
+    return jsonify()
