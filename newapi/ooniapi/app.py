@@ -12,6 +12,8 @@ from flask_cors import CORS  # debdeps: python3-flask-cors
 # python3-flask-cors has unnecessary dependencies :-/
 from ooniapi.rate_limit_quotas import FlaskLimiter
 
+from systemd.journal import JournalHandler  # debdeps: python3-systemd
+
 from flasgger import Swagger
 
 from flask_mail import Mail  # debdeps: python3-flask-mail
@@ -82,7 +84,9 @@ def init_app(app, testmode=False):
     log = app.logger
     app.config.from_object("ooniapi.config")
     conffile = os.getenv("CONF", "/etc/ooni/api.conf")
-    log.info(f"Loading conf from {conffile}")
+    log.addHandler(JournalHandler(SYSLOG_IDENTIFIER="ooni-api"))
+    log.setLevel(logging.DEBUG)
+    log.info(f"Starting OONI API. Loading conf from {conffile}")
     app.config.from_pyfile(conffile)
     validate_conf(app, conffile)
     log.info("Configuration loaded")
