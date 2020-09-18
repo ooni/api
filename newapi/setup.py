@@ -8,12 +8,6 @@ setup(
     include_package_data=True,
     zip_safe=False,
     entry_points={"console_scripts": ["ooniapi = measurements.cli:cli",]},
-    package_data={
-        "ooniapi": (
-            "*.adoc",
-            "templates/*",
-            "static/*/*",
-            "countries/country-list.json",
-        ),
-    },
+    scripts=["ooni_api_uploader.py"],
+    package_data={"ooniapi": ("*.adoc", "templates/*", "static/*/*",),},
 )
