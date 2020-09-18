@@ -54,7 +54,6 @@ def validate_conf(app, conffile):
     conf_keys = (
         "AUTOCLAVED_BASE_URL",
         "BASE_URL",
-        "CENTRIFUGATION_BASE_URL",
         "COLLECTORS",
         "DATABASE_STATEMENT_TIMEOUT",
         "DATABASE_URI_RO",
@@ -63,6 +62,7 @@ def validate_conf(app, conffile):
         "MAIL_SERVER",
         "MAIL_USERNAME",
         "MAIL_USE_SSL",
+        "MSMT_SPOOL_DIR",
         "S3_ACCESS_KEY_ID",
         "S3_ENDPOINT_URL",
         "S3_SECRET_ACCESS_KEY",
@@ -70,8 +70,7 @@ def validate_conf(app, conffile):
     )
     for k in conf_keys:
         if k not in app.config:
-            log = app.logger
-            log.error(f"Missing configuration key {k} in {conffile}")
+            app.logger.error(f"Missing configuration key {k} in {conffile}")
             # exit with 4 to terminate gunicorn
             sys.exit(4)
 
