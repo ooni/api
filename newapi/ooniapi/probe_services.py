@@ -395,7 +395,9 @@ def receive_measurement(report_id):
 
     ts = now.strftime("%H%S%M.%f")
     msmt_f = msmtdir / f"{ts}_{h}.json"
-    msmt_f.write_bytes(data)
+    msmt_f_tmp = msmtdir / f"{ts}_{h}.json.tmp"
+    msmt_f_tmp.write_bytes(data)
+    msmt_f_tmp.rename(msmt_f)
 
     # TODO forward to fastpath
     # TODO return jsonify(measurement_id = mid)
