@@ -17,6 +17,7 @@ User=ooniapi
 Group=ooniapi
 ReadOnlyDirectories=/
 ReadWriteDirectories=/proc/self
+ReadWriteDirectories=/var/lib/ooniapi/
 
 StandardOutput=syslog+console
 StandardError=syslog+console
