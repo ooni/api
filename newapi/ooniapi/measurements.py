@@ -7,12 +7,17 @@ from csv import DictWriter
 from datetime import datetime, timedelta
 from dateutil.parser import parse as parse_date
 from io import StringIO
+from pathlib import Path
+import gzip
 import http.client
 import json
+import logging
 import math
 import time
 
 import lz4framed
+
+import ujson
 
 from flask import current_app, request, make_response, abort, redirect
 from flask.json import jsonify
@@ -24,10 +29,12 @@ from sqlalchemy import String, cast
 from sqlalchemy.exc import OperationalError
 from psycopg2.extensions import QueryCanceledError
 
+from urllib.request import urlopen
 from urllib.parse import urljoin, urlencode
 
 from ooniapi import __version__
 from ooniapi.config import REPORT_INDEX_OFFSET
+from ooniapi.utils import cachedjson
 
 from flask import Blueprint
 
@@ -38,6 +45,8 @@ api_msm_blueprint = Blueprint("msm_api", "measurements")
 FASTPATH_MSM_ID_PREFIX = "temp-fid-"
 FASTPATH_SERVER = "fastpath.ooni.nu"
 FASTPATH_PORT = 8000
+
+log = logging.getLogger()
 
 
 class QueryTimeoutError(HTTPException):
@@ -55,205 +64,15 @@ def show_apidocs():
     return redirect("/apidocs")
 
 
+
 @api_msm_blueprint.route("/v1/files")
 def list_files():
-    """List files
-    ---
-    parameters:
-      - name: probe_cc
-        in: query
-        type: string
-        description: The two letter country code
-      - name: probe_asn
-        in: query
-        type: string
-        description: the Autonomous system number in the format "ASXXX"
-      - name: test_name
-        in: query
-        type: string
-        description: The name of the test
-      - name: since
-        in: query
-        type: string
-        description: >-
-          The start date of when measurements were run (ex.
-          "2016-10-20T10:30:00")
-      - name: until
-        in: query
-        type: string
-        description: >-
-          The end date of when measurement were run (ex.
-          "2016-10-20T10:30:00")
-      - name: since_index
-        in: query
-        type: string
-        description: Return results only strictly greater than the provided index
-      - name: order_by
-        in: query
-        type: string
-        description: |-
-          by which key the results should be ordered by (default: `test_start_time`)
-        enum:
-          - test_start_time
-          - probe_cc
-          - report_id
-          - probe_asn
-          - test_name
-          # These are all equivalent
-          - index
-          - idx
-          - report_no
-      - name: order
-        in: query
-        type: string
-        description: |-
-          If the order should be ascending or descending (one of: `asc` or `desc`)
-        enum:
-          - asc
-          - desc
-          - ASC
-          - DESC
-      - name: offset
-        in: query
-        type: integer
-        description: 'Offset into the result set (default: 0)'
-      - name: limit
-        in: query
-        type: integer
-        description: 'Number of records to return (default: 100)'
-    responses:
-      '200':
-        description: List of files that match the requested criteria with pagination
-        schema:
-          $ref: "#/definitions/FileList"
-
-      default:
-        description: Default response
+    """List files - unsupported
     """
-    param = request.args.get
-    probe_asn = param("probe_asn")
-    probe_cc = param("probe_cc")
-    test_name = param("test_name")
-    since = param("since")
-    until = param("until")
-    since_index = param("since_index")
-    order_by = param("order_by", "index")
-    order = param("order", "desc")
-    offset = int(param("offset", 0))
-    limit = int(param("limit", 100))
-    log = current_app.logger
-
-    if probe_asn is not None:
-        if probe_asn.startswith("AS"):
-            probe_asn = probe_asn[2:]
-        probe_asn = int(probe_asn)
-
-    try:
-        if since is not None:
-            since = parse_date(since)
-    except ValueError:
-        raise BadRequest("Invalid since")
-
-    try:
-        if until is not None:
-            until = parse_date(until)
-    except ValueError:
-        raise BadRequest("Invalid until")
-
-    if since_index is not None:
-        since_index = int(since_index)
-        report_no = max(0, since_index - REPORT_INDEX_OFFSET)
-
-    if order_by in ("index", "idx"):
-        order_by = "report_no"
-
-    cols = [
-        literal_column("textname"),
-        literal_column("test_start_time"),
-        literal_column("probe_cc"),
-        literal_column("probe_asn"),
-        literal_column("report_no"),
-        literal_column("test_name"),
-    ]
-    where = []
-    query_params = {}
-
-    # XXX maybe all of this can go into some sort of function.
-    if probe_cc:
-        where.append(sql.text("probe_cc = :probe_cc"))
-        query_params["probe_cc"] = probe_cc
-
-    if probe_asn:
-        where.append(sql.text("probe_asn = :probe_asn"))
-        query_params["probe_asn"] = probe_asn
-
-    if test_name:
-        where.append(sql.text("test_name = :test_name"))
-        query_params["test_name"] = test_name
-
-    if since:
-        where.append(sql.text("test_start_time > :since"))
-        query_params["since"] = since
-
-    if until:
-        where.append(sql.text("test_start_time <= :until"))
-        query_params["until"] = until
-
-    if since_index:
-        where.append(sql.text("report_no > :report_no"))
-        query_params["report_no"] = report_no
-
-    query = select(cols).where(and_(*where)).select_from("report")
-    count = -1
-    pages = -1
-    current_page = math.ceil(offset / limit) + 1
-
-    query = query.order_by(text("{} {}".format(order_by, order)))
-    query = query.limit(limit).offset(offset)
-
-    results = []
-
-    log.debug(query)
-    q = current_app.db_session.execute(query, query_params)
-    for row in q:
-        download_url = urljoin(
-            current_app.config["BASE_URL"], "/files/download/%s" % row.textname
-        )
-        results.append(
-            {
-                "download_url": download_url,
-                "probe_cc": row.probe_cc,
-                "probe_asn": "AS{}".format(row.probe_asn),
-                "test_name": row.test_name,
-                "index": int(row.report_no) + REPORT_INDEX_OFFSET,
-                "test_start_time": row.test_start_time,
-            }
-        )
-    # We got less results than what we expected, we know the count and that we are done
-    if len(results) < limit:
-        count = offset + len(results)
-        pages = math.ceil(count / limit)
-        next_url = None
-    else:
-        next_args = request.args.to_dict()
-        next_args["offset"] = "%s" % (offset + limit)
-        next_args["limit"] = "%s" % limit
-        next_url = urljoin(
-            current_app.config["BASE_URL"], "/api/v1/files?%s" % urlencode(next_args)
-        )
-
-    metadata = {
-        "offset": offset,
-        "limit": limit,
-        "count": count,
-        "pages": pages,
-        "current_page": current_page,
-        "next_url": next_url,
-    }
-
-    return jsonify({"metadata": metadata, "results": results})
+    return cachedjson(24, msg="not implemented")
 
 
+# FIXME respond with help message
 @api_msm_blueprint.route("/v1/measurement/<measurement_id>")
 def get_measurement(measurement_id, download=None):
     """Get one measurement by measurement_id,
@@ -308,19 +127,22 @@ def get_measurement(measurement_id, download=None):
         raise BadRequest("No measurement found")
 
 
-def _fetch_measurement_body(
+# # Fetching measurement bodies
+
+def _fetch_autoclaved_measurement_body_from_s3(
     autoclaved_fn: str, frame_off: int, frame_size: int, intra_off: int, intra_size: int
 ) -> bytes:
-    """
-    """
+    """Fetch autoclaved byte range from S3, decompress it"""
+    log = current_app.logger
     REQID_HDR = "X-Request-ID"
-    AUTOCLAVED_BASE_URL = "http://datacollector.infra.ooni.io/ooni-public/autoclaved/"
+    # This is the legacy / autoclaved S3 bucket
+    BASEURL = "https://ooni-data.s3.amazonaws.com/autoclaved/jsonl.tar.lz4/"
     # Usual size of LZ4 frames is 256kb of decompressed text.
     # Largest size of LZ4 frame was ~55Mb compressed and ~56Mb decompressed.
-    # :-/
-    url = urljoin(current_app.config["AUTOCLAVED_BASE_URL"], autoclaved_fn)
+    url = urljoin(BASEURL, autoclaved_fn)
     range_header = "bytes={}-{}".format(frame_off, frame_off + frame_size - 1)
     hdr = {"Range": range_header}
+    log.info(f"Fetching {url} {range_header}")
     r = requests.get(url, headers=hdr)
     r.raise_for_status()
     blob = r.content
@@ -340,6 +162,172 @@ def _fetch_measurement_body(
     return blob
 
 
+def _fetch_jsonl_measurement_body_inner(s3path: str, linenum: int,) -> bytes:
+    log = current_app.logger
+    REQID_HDR = "X-Request-ID"
+    BASEURL = "https://ooni-data-eu-fra-test.s3.amazonaws.com/"
+    url = urljoin(BASEURL, s3path)
+    log.info(f"Fetching {url}")
+    r = urlopen(url)
+    f = gzip.GzipFile(fileobj=r, mode="r")
+    for n, line in enumerate(f):
+        if n == linenum:
+            return line
+
+    return b""
+
+
+def _fetch_jsonl_measurement_body(report_id, input: str) -> bytes:
+    """Fetch jsonl from S3, decompress it, extract msmt"""
+    query = """SELECT s3path, linenum
+    FROM jsonl
+    WHERE report_id = :report_id
+    AND input = :input
+    """
+    if input is None:
+        input = ""
+    query_params = dict(input=input, report_id=report_id)
+    q = current_app.db_session.execute(query, query_params)
+    lookup = q.fetchone()
+    if lookup is None:
+        log.error(f"Row not found in jsonl table: {report_id} {input}")
+        return b""
+
+    s3path = lookup.s3path
+    linenum = lookup.linenum
+    if s3path.startswith("raw/") and s3path.endswith(".jsonl.gz"):
+        log.error(s3path)
+        return _fetch_jsonl_measurement_body_inner(s3path, linenum)
+
+    return b""
+
+
+def _unwrap_post(post: dict) -> dict:
+    fmt = post.get("format", "")
+    if fmt == "json":
+        return post.get("content", {})
+    if fmt == "yaml":
+        return yaml.load(msm, Loader=yaml.CLoader)
+    raise Exception("Unexpected format")
+
+
+def _fetch_measurement_body_on_disk(report_id, input: str) -> bytes:
+    """Fetch raw POST from disk, extract msmt"""
+    query = """SELECT measurement_uid
+    FROM fastpath
+    WHERE report_id = :report_id
+    """
+    if input is None:
+        query += " AND input IS NULL"
+    else:
+        query += " AND input = :input"
+    query_params = dict(input=input, report_id=report_id)
+    q = current_app.db_session.execute(query, query_params)
+    lookup = q.fetchone()
+    if lookup is None:
+        log.error(f"Row not found in fastpath table: {report_id} {input}")
+        raise Exception
+
+    msmt_uid = lookup.measurement_uid
+    if msmt_uid is None:
+        # older msmt
+        return None
+    assert msmt_uid.startswith("20")
+    tstamp, cc, testname, hash_ = msmt_uid.split("_")
+    hour = tstamp[:10]
+    int(hour)
+    spooldir = Path("/var/lib/ooniapi/measurements/incoming/")
+    postf = spooldir / f"{hour}_{cc}_{testname}/{msmt_uid}.post"
+    log.debug(f"Attempt at reading {postf}")
+    try:
+        with postf.open() as f:
+            post = ujson.load(f)
+    except FileNotFoundError:
+        return None
+    body = _unwrap_post(post)
+    return ujson.dumps(body)
+
+
+def _fetch_autoclaved_measurement_body(report_id: str, input) -> dict:
+    """fetch the measurement body using autoclavedlookup"""
+    # uses_pg_index autoclavedlookup_idx
+    # None/NULL input needs to be is treated as ""
+    query = """SELECT
+    frame_off,
+    frame_size,
+    intra_off,
+    intra_size,
+    textname,
+    filename,
+    report_id,
+    input
+    FROM autoclavedlookup
+    WHERE md5(report_id || COALESCE(input, '')) = md5(:report_id || :input)
+    """
+    query_params = dict(input=(input or ""), report_id=report_id)
+    q = current_app.db_session.execute(query, query_params)
+    r = q.fetchone()
+    if r is None:
+        current_app.logger.error(f"missing autoclaved for {report_id} {input}")
+        # This is a bug somewhere: the msmt is is the fastpath table and
+        # not in the autoclavedlookup table
+        return None
+
+    body = _fetch_autoclaved_measurement_body_from_s3(
+        r.filename, r.frame_off, r.frame_size, r.intra_off, r.intra_size
+    )
+    return body
+
+
+def _fetch_measurement_body(report_id, input: str) -> bytes:
+    """Fetch measurement body from either disk, jsonl or autoclaved on S3
+    """
+    log.debug(f"Fetching body for {report_id} {input}")
+    if report_id.count("_") == 5:
+        # Look on disk and then from JSONL cans on S3
+        body = _fetch_measurement_body_on_disk(report_id, input)
+        if body is None:
+            log.debug(f"Fetching body for {report_id} {input} from jsonl on S3")
+            body = _fetch_jsonl_measurement_body(report_id, input)
+    elif report_id.count("_") == 2:
+        body = _fetch_autoclaved_measurement_body(report_id, input)
+    else:
+        raise BadRequest("Invalid report_id")
+    return body
+
+
+@api_msm_blueprint.route("/v1/raw_measurement")
+def get_raw_measurement():
+    """Get raw measurement body by measurement_id + input
+    ---
+    parameters:
+      - name: report_id
+        in: query
+        type: string
+        description: The report_id to search measurements for
+      - name: input
+        in: query
+        type: string
+        minLength: 3
+        description: The input (for example a URL or IP address) to search measurements for
+    responses:
+      '200':
+        description: raw measurement body, served as JSON file to be dowloaded
+    """
+    # This is used by Explorer to let users download msmts
+    log = current_app.logger
+    param = request.args.get
+    report_id = param("report_id")
+    if not report_id or len(report_id) < 15:
+        raise BadRequest("Invalid report_id")
+    input = param("input")
+    body = _fetch_measurement_body(report_id, input)
+    resp = make_response(body)
+    resp.headers.set("Content-Type", "application/json")
+    resp.cache_control.max_age = 24 * 3600
+    return resp
+
+
 @api_msm_blueprint.route("/v1/measurement_meta")
 def get_measurement_meta():
     """Get metadata on one measurement by measurement_id + input
@@ -357,98 +345,71 @@ def get_measurement_meta():
       - name: full
         in: query
         type: boolean
-        description: Include JSON measurement data if available
+        description: Include JSON measurement data
     responses:
       '200':
-        description: Returns a measurement, optionally including the JSON data
-        schema:
-          $ref: "#/definitions/MeasurementList"
-      default:
-        description: Default response
-    x-code-samples:
-      - lang: 'curl'
-        source: |
-          curl "https://api.ooni.io/api/v1/measurement_meta?report_id=FIXME&input=FIXME"
+        description: Returns measurement metadata, optionally including the raw measurement body
     """
+
+    #TODO: input can be '' or NULL in the fastpath table - fix it
     # TODO: see integ tests for TODO items
-    log = current_app.logger
     param = request.args.get
     report_id = param("report_id")
-    input = param("input")
-    full = param("full")
-    if not report_id:
+    if not report_id or len(report_id) < 15:
         raise BadRequest("Invalid report_id")
+    input = param("input", None)
+    if input == "":
+        input = None
+
+    full = param("full", "").lower() in ("true", "1", "yes")
+    log.info(f"get_measurement_meta '{report_id}' '{input}'")
 
     # Given report_id + input, fetch measurement data from fastpath table
-    cols = [
-        literal_column("anomaly"),
-        literal_column("confirmed"),
-        literal_column("msm_failure").label("failure"),
-        literal_column("input"),
-        literal_column("measurement_start_time"),
-        literal_column("probe_asn"),
-        literal_column("probe_cc"),
-        literal_column("report_id"),
-        cast(sql.text("scores"), String).label("scores"),
-        literal_column("test_name"),
-        literal_column("test_start_time"),
-    ]
-    table = sql.table("fastpath")
-
+    query = """SELECT
+        anomaly,
+        confirmed,
+        msm_failure AS failure,
+        input,
+        measurement_start_time,
+        probe_asn,
+        probe_cc,
+        report_id,
+        CAST(scores AS varchar) AS scores,
+        test_name,
+        test_start_time
+    """
+    # fastpath uses input = '' for empty values
     if input is None:
-        input = ""
-
-    if input is "":
-        cols.append(sql.text("null::text AS category_code"))
-
+        query += """
+        FROM fastpath
+        WHERE fastpath.report_id = :report_id
+        AND (fastpath.input IS NULL or fastpath.input = '')
+        """
     else:
-        cols.append(literal_column("citizenlab.category_code").label("category_code"))
-        table = table.join(
-            sql.table("citizenlab"),
-            sql.text("citizenlab.url = fastpath.input"),
-            isouter=True,
-        )
-
-    where = and_(
-        sql.text("fastpath.input = :input"), sql.text("fastpath.report_id = :report_id")
-    )
-    query = select(cols).where(where).select_from(table)
-
+        query += """
+            , citizenlab.category_code AS category_code
+        FROM fastpath
+        LEFT OUTER JOIN citizenlab ON citizenlab.url = fastpath.input
+        WHERE fastpath.input = :input
+        AND fastpath.report_id = :report_id
+        """
     query_params = dict(input=input, report_id=report_id)
     q = current_app.db_session.execute(query, query_params)
-    resp = q.fetchone()
-    if resp is None:
-        abort(404)
+    msmt_meta = q.fetchone()
+    if msmt_meta is None:
+        # measurement not found
+        return jsonify({})
 
-    resp = dict(resp)
+    msmt_meta = dict(msmt_meta)
 
-    if full:
-        # if full, also fetch the measurement body
-        cols = [
-            literal_column("frame_off"),
-            literal_column("frame_size"),
-            literal_column("intra_off"),
-            literal_column("intra_size"),
-            literal_column("textname"),
-            literal_column("filename"),
-            literal_column("report_id"),
-            literal_column("input")
-        ]
-        where = and_(
-            sql.text("input = :input"), sql.text("report_id = :report_id")
-        )
-        query = select(cols).where(where).select_from(sql.table("autoclavedlookup"))
-        query_params = dict(input=input, report_id=report_id)
-        q = current_app.db_session.execute(query, query_params)
-        r = q.fetchone()
-        if r is None:
-            log.error(f"autoclaved record for {report_id} {input} not found")
-            abort(500)
-        body = _fetch_measurement_body(r.filename, r.frame_off, r.frame_size, r.intra_off, r.intra_size)
-        resp["data"] = body
+    if not full:
+        return cachedjson(24, **msmt_meta)
 
-    return resp
+    body = _fetch_measurement_body(report_id, input)
+    return cachedjson(24, raw_measurement=body, **msmt_meta)
 
+
+# # Listing measurements
 
 def _merge_results(tmpresults):
     """Trim list_measurements() outputs that share the same report_id/input
@@ -688,7 +649,6 @@ def list_measurements():
         # We use test_start_time here as the batch pipeline has many NULL measurement_start_times
         literal_column("measurement_start_time").label("test_start_time"),
         literal_column("measurement_start_time"),
-        func.concat(FASTPATH_MSM_ID_PREFIX, sql.text("tid")).label("measurement_id"),
         literal_column("anomaly"),
         literal_column("confirmed"),
         literal_column("msm_failure").label("failure"),
@@ -783,27 +743,15 @@ def list_measurements():
                 )
                 fpwhere.append(sql.text("citizenlab.category_code = :category_code"))
 
-    # We runs SELECTs on the measurement-report (mr) tables and faspath independently
-    # from each other and then merge them.
-    # The FULL OUTER JOIN query is using LIMIT and OFFSET based on the
-    # list_measurements arguments. To speed up the two nested queries,
-    # an ORDER BY + LIMIT on "limit+offset" is applied in each of them to trim
-    # away rows that would be removed anyways by the outer query.
-    #
-    # During a merge we can find that a measurement is:
-    # - only in fastpath:       get_measurement will pick the JSON msmt from the fastpath host
-    # - in both selects:        pick `scores` from fastpath and the msmt from the can
-    # - only in "mr":           the msmt from the can
-    #
-    # This implements a failover mechanism where new msmts are loaded from fastpath
-    # but can fall back to the traditional pipeline.
-
     fp_query = (
         select(fpcols)
         .where(and_(*fpwhere))
         .select_from(fpq_table)
         .limit(offset + limit)
     )
+
+    # SELECT * FROM fastpath  WHERE measurement_start_time <= '2019-01-01T00:00:00'::timestamp AND probe_cc = 'YT' ORDER BY test_start_time desc   LIMIT 100 OFFSET 0;
+    # is using BRIN and running slowly
 
     if order_by is None:
         # Use test_start_time or measurement_start_time depending on other
@@ -827,18 +775,19 @@ def list_measurements():
     # Run the query, generate the results list
     iter_start_time = time.time()
 
+    current_app.db_session.execute("SET enable_seqscan=false;")
     try:
         q = current_app.db_session.execute(query, query_params)
         tmpresults = []
         for row in q:
-            url = urljoin(
-                current_app.config["BASE_URL"],
-                "/api/v1/measurement/%s" % row.measurement_id,
-            )
+            # TODO generate url properly
+            url = f"/api/v1/raw_measurement?report_id={row.report_id}&input={row.input}"
+            # url = urljoin(current_app.config["BASE_URL"], url)
+            # FIXME
+            url = urljoin("https://ams-pg.ooni.org/", url)
             tmpresults.append(
                 {
                     "measurement_url": url,
-                    "measurement_id": row.measurement_id,
                     "report_id": row.report_id,
                     "probe_cc": row.probe_cc,
                     "probe_asn": "AS{}".format(row.probe_asn),
@@ -1050,9 +999,6 @@ def get_aggregated():
 
     if domain:
         # Join in domain_input table and filter by domain
-        table = table.join(
-            sql.table("domain_input"), sql.text("counters.input = domain_input.input"),
-        )
         where.append(sql.text("domain = :domain"))
         query_params["domain"] = domain
 
