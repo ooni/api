@@ -8,6 +8,7 @@ from os import urandom
 
 from pathlib import Path
 from hashlib import sha512
+from urllib.request import urlopen
 
 import ujson
 from flask import Blueprint, current_app, request, make_response
@@ -22,7 +23,7 @@ probe_services_blueprint = Blueprint("ps_api", "probe_services")
 
 def req_json():
     # Some probes are not setting the JSON mimetype.
-    #if request.is_json():
+    # if request.is_json():
     #    return request.json
     return ujson.loads(request.data)
 
@@ -37,15 +38,15 @@ def list_collectors():
     """
     # TODO load from configuration file
     j = [
-        {"address": "httpo://jehhrikjjqrlpufu.onion", "type": "onion"},
-        {"address": "https://ams-ps2.ooni.org:443", "type": "https"},
+        {"address": "httpo://guegdifjy7bjpequ.onion", "type": "onion"},
+        {"address": "https://ams-pg.ooni.org:443", "type": "https"},
         {
             "address": "https://dkyhjv0wpi2dk.cloudfront.net",
             "front": "dkyhjv0wpi2dk.cloudfront.net",
             "type": "cloudfront",
         },
-        {"address": "httpo://hcn5nqahdkds6cjv.onion", "type": "onion"},
-        {"address": "https://mia-ps2.ooni.org:443", "type": "https"},
+        {"address": "httpo://guegdifjy7bjpequ.onion", "type": "onion"},
+        {"address": "https://mia-pg.ooni.org:443", "type": "https"},
         {
             "address": "https://dkyhjv0wpi2dk.cloudfront.net",
             "front": "dkyhjv0wpi2dk.cloudfront.net",
@@ -53,88 +54,6 @@ def list_collectors():
         },
     ]
     return cachedjson(1, j)
-
-
-#@probe_services_blueprint.route("/api/v1/login", methods=["POST"])
-#def login_post():
-#   """Probe Services: login
-#   Not implemented
-#   ---
-#   parameters:
-#     - in: body
-#       name: auth data
-#       description: Username and password
-#       required: true
-#       schema:
-#         type: object
-#         properties:
-#           username:
-#             type: string
-#           password:
-#             type: string
-#   responses:
-#     '200':
-#       description: Auth object
-#       content:
-#         application/json:
-#           schema:
-#             type: object
-#             properties:
-#               token:
-#                 type: string
-#                 description: Token
-#               expire:
-#                 type: string
-#                 description: Expiration time
-#   """
-#   return jsonify({"msg": "not implemented"})  # TODO
-
-
-# @probe_services_blueprint.route("/api/v1/register", methods=["POST"])
-# def register():
-#    """Probe Services: Register
-#    Not implemented
-#    ---
-#    parameters:
-#      - in: body
-#        name: register data
-#        description: Registration data
-#        required: true
-#        schema:
-#          type: object
-#          properties:
-#            password:
-#              type: string
-#            platform:
-#              type: string
-#            probe_asn:
-#              type: string
-#            probe_cc:
-#              type: string
-#            software_name:
-#              type: string
-#            software_version:
-#              type: string
-#            supported_tests:
-#              type: array
-#              items:
-#                type: string
-#    responses:
-#      '200':
-#        description: Registration confirmation
-#        content:
-#          application/json:
-#            schema:
-#              type: object
-#              properties:
-#                token:
-#                  description: client_id
-#                  type: string
-#    """
-#    if not request.is_json:
-#        return jsonify({"msg": "error: JSON expected!"})
-#
-#    return jsonify({"client_id": "BOGUS_CLIENT_ID"})  # FIXME
 
 
 @probe_services_blueprint.route("/api/v1/test-helpers")
@@ -256,7 +175,7 @@ def bouncer_net_tests():
     j = {
         "net-tests": [
             {
-                "collector": "httpo://jehhrikjjqrlpufu.onion",
+                "collector": "httpo://guegdifjy7bjpequ.onion",
                 "collector-alternate": [
                     {"type": "https", "address": "https://ams-pg.ooni.org"},
                     {
@@ -374,12 +293,16 @@ def receive_measurement(report_id):
     """
     log = current_app.logger
     try:
-        timestamp, test_name, cc, asn, format_cid, rand = report_id.split("_")
+        rid_timestamp, test_name, cc, asn, format_cid, rand = report_id.split("_")
     except:
         log.info("Unexpected report_id %r", report_id[:200])
         return jerror("Incorrect format")
 
     # TODO validate the timestamp?
+    good = len(cc) == 2 and test_name.isalnum() and 1 < len(test_name) < 30
+    if not good:
+        log.info("Unexpected report_id %r", report_id[:200])
+        return jerror("Incorrect format")
 
     # Write the whole body of the measurement in a directory based on a 1-hour
     # time window
@@ -392,16 +315,22 @@ def receive_measurement(report_id):
 
     data = request.data
     h = sha512(data).hexdigest()[:16]
-
-    ts = now.strftime("%H%S%M.%f")
-    msmt_f = msmtdir / f"{ts}_{h}.json"
-    msmt_f_tmp = msmtdir / f"{ts}_{h}.json.tmp"
+    ts = now.strftime("%Y%m%d%H%S%M.%f")
+    # msmt_uid is a unique id based on upload time, cc, testname and hash
+    msmt_uid = f"{ts}_{cc}_{test_name}_{h}"
+    msmt_f_tmp = msmtdir / f"{msmt_uid}.post.tmp"
     msmt_f_tmp.write_bytes(data)
+    msmt_f = msmtdir / f"{msmt_uid}.post"
     msmt_f_tmp.rename(msmt_f)
 
-    # TODO forward to fastpath
-    # TODO return jsonify(measurement_id = mid)
-    return jsonify()
+    try:
+        url = f"http://127.0.0.1:8472/{msmt_uid}"
+        urlopen(url, data, 59)
+        return jsonify(measurement_uid=msmt_uid)
+
+    except Exception as e:
+        log.exception(e)
+        return jsonify()
 
 
 @probe_services_blueprint.route("/report/<report_id>/close", methods=["POST"])
