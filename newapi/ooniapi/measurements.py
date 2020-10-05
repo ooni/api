@@ -296,6 +296,12 @@ def _fetch_measurement_body(report_id, input: str) -> bytes:
     return body
 
 
+def genurl(path: str, **kw) -> str:
+    """Generate absolute URL for the API"""
+    base = current_app.config["BASE_URL"]
+    return urljoin(base, path) + "?" + urlencode(kw)
+
+
 @api_msm_blueprint.route("/v1/raw_measurement")
 def get_raw_measurement():
     """Get raw measurement body by measurement_id + input
@@ -780,11 +786,10 @@ def list_measurements():
         q = current_app.db_session.execute(query, query_params)
         tmpresults = []
         for row in q:
-            # TODO generate url properly
-            url = f"/api/v1/raw_measurement?report_id={row.report_id}&input={row.input}"
-            # url = urljoin(current_app.config["BASE_URL"], url)
-            # FIXME
-            url = urljoin("https://ams-pg.ooni.org/", url)
+            if row.input in (None, ""):
+                url = genurl("/api/v1/raw_measurement", report_id=row.report_id)
+            else:
+                url = genurl("/api/v1/raw_measurement", report_id=row.report_id, input=row.input)
             tmpresults.append(
                 {
                     "measurement_url": url,
@@ -836,12 +841,9 @@ def list_measurements():
         # current_page = math.ceil(offset / limit) + 1
         # query_time += time.time() - count_start_time
         next_args = request.args.to_dict()
-        next_args["offset"] = "%s" % (offset + limit)
-        next_args["limit"] = "%s" % limit
-        next_url = urljoin(
-            current_app.config["BASE_URL"],
-            "/api/v1/measurements?%s" % urlencode(next_args),
-        )
+        next_args["offset"] = str(offset + limit)
+        next_args["limit"] = str(limit)
+        next_url = genurl("/api/v1/measurements", **next_args)
 
     query_time = time.time() - iter_start_time
     metadata = {
