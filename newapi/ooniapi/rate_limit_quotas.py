@@ -53,7 +53,13 @@ class Limiter:
         self._ipaddr_extraction_methods = ipaddr_methods
         self._last_quota_update_time = time.monotonic()
         self._whitelisted_ipaddrs = set()
-        self._unmetered_pages = set(unmetered_pages or ())
+        self._unmetered_pages_globs = set()
+        self._unmetered_pages = set()
+        for p in unmetered_pages:
+            if p.endswith("*"):
+                self._unmetered_pages_globs.add(p.rstrip("*"))
+            else:
+                self._unmetered_pages.add(p)
         for ipa in whitelisted_ipaddrs or []:
             self._whitelisted_ipaddrs.add(ipaddress.ip_address(ipa))
 
@@ -139,7 +145,13 @@ class Limiter:
         return ipaddr in self._whitelisted_ipaddrs
 
     def is_page_unmetered(self, path) -> bool:
-        return path in self._unmetered_pages
+        if path in self._unmetered_pages:
+            return True
+        for u in self._unmetered_pages_globs:
+            if path.startswith(u):
+                return True
+
+        return False
 
     def get_lowest_daily_quotas_summary(self, n=20) -> List[Tuple[int, float]]:
         """Returns a summary of daily quotas with the lowest values

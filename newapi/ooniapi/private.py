@@ -60,15 +60,6 @@ def api_private_asn_by_month():
         description: [{"date":"2018-08-31","value":4411}, ... ]
     """
     # OLAP-use-case
-    #  CREATE MATERIALIZED VIEW global_by_month AS
-    #  SELECT
-    #      COUNT(DISTINCT probe_asn) AS networks_by_month,
-    #      COUNT(DISTINCT probe_cc) AS countries_by_month,
-    #      SUM(measurement_count) AS measurements_by_month,
-    #      date_trunc('month', measurement_start_day) AS month
-    #  FROM counters
-    #  WHERE measurement_start_day > DATE_TRUNC('month', NOW()) - interval '24 months'
-    #  GROUP BY date_trunc('month', measurement_start_day);
     cols = [sql.text("networks_by_month"), sql.text("month")]
     q = select(cols).select_from(sql.table("global_by_month"))
     q = current_app.db_session.execute(q)

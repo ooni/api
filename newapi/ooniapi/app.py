@@ -81,7 +81,7 @@ def init_app(app, testmode=False):
     # Load configurations defaults from ooniapi/config.py
     # and then from the file pointed by CONF
     # (defaults to /etc/ooni/api.conf)
-    log = app.logger
+    log = logging.getLogger("ooni-api")
     app.config.from_object("ooniapi.config")
     conffile = os.getenv("CONF", "/etc/ooni/api.conf")
     log.addHandler(JournalHandler(SYSLOG_IDENTIFIER="ooni-api"))
@@ -147,7 +147,7 @@ def create_app(*args, testmode=False, **kw):
     # Whitelist Prometheus and AMS Explorer
     # TODO: move addrs to an external config file /etc/ooniapi.conf ?
     whitelist = ["37.218.245.43", "37.218.242.149"]
-    unmetered_pages = ["/", "/health"]
+    unmetered_pages = ["/", "/health", "/report*"]
     app.limiter = FlaskLimiter(
         limits=limits,
         app=app,
