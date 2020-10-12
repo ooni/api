@@ -724,30 +724,24 @@ def list_measurements():
 
     fpq_table = sql.table("fastpath")
 
-    if input_ or domain or category_code:
-        # join in domain_input
-        fpq_table = fpq_table.join(
-            sql.table("domain_input"), sql.text("domain_input.input = fastpath.input")
-        )
+    if input_:
+        # input_ overrides domain and category_code
+        query_params["input"] = input_
+        fpwhere.append(sql.text("input = :input"))
 
-        if input_:
-            # input_ overrides domain and category_code
-            query_params["input"] = input_
-            fpwhere.append(sql.text("domain_input.input = :input"))
+    elif domain or category_code:
+        # both domain and category_code can be set at the same time
+        if domain:
+            query_params["domain"] = domain
+            fpwhere.append(sql.text("domain = :domain"))
 
-        else:
-            # both domain and category_code can be set at the same time
-            if domain:
-                query_params["domain"] = domain
-                fpwhere.append(sql.text("domain_input.domain = :domain"))
-
-            if category_code:
-                query_params["category_code"] = category_code
-                fpq_table = fpq_table.join(
-                    sql.table("citizenlab"),
-                    sql.text("citizenlab.url = domain_input.input"),
-                )
-                fpwhere.append(sql.text("citizenlab.category_code = :category_code"))
+        if category_code:
+            query_params["category_code"] = category_code
+            fpq_table = fpq_table.join(
+                sql.table("citizenlab"),
+                sql.text("citizenlab.url = :input"),
+            )
+            fpwhere.append(sql.text("citizenlab.category_code = :category_code"))
 
     fp_query = (
         select(fpcols)
@@ -828,7 +822,8 @@ def list_measurements():
     count = -1
     current_page = math.ceil(offset / limit) + 1
 
-    # We got less results than what we expected, we know the count and that we are done
+    # We got less results than what we expected, we know the count and that
+    # we are done
     if len(results) < limit:
         count = offset + len(results)
         pages = math.ceil(count / limit)
@@ -1000,7 +995,6 @@ def get_aggregated():
     query_params = {}
 
     if domain:
-        # Join in domain_input table and filter by domain
         where.append(sql.text("domain = :domain"))
         query_params["domain"] = domain
 
@@ -1044,8 +1038,8 @@ def get_aggregated():
 
     if axis_y:
         # TODO: check if the value is a valid colum name
-        cols.append(column(axis_y))
-        if axis_y == "category_code":
+        if axis_y == "category_code" and axis_x != "category_code":
+            cols.append(column(axis_y))
             # Join in citizenlab table
             table = table.join(
                 sql.table("citizenlab"), sql.text("citizenlab.url = counters.input"),
@@ -1059,7 +1053,7 @@ def get_aggregated():
     if axis_x:
         query = query.group_by(column(axis_x)).order_by(column(axis_x))
 
-    if axis_y:
+    if axis_y and axis_y != axis_x:
         query = query.group_by(column(axis_y)).order_by(column(axis_y))
 
     try:
