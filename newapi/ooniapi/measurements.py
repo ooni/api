@@ -612,25 +612,9 @@ def list_measurements():
             probe_asn = probe_asn[2:]
         probe_asn = int(probe_asn)
 
-    # When the user specifies a list that includes all the possible values for
-    # boolean arguments, that is logically the same of applying no filtering at
-    # all.
-    # TODO: treat it as an error?
-    if failure is not None:
-        if set(failure) == set(["true", "false"]):
-            failure = None
-        else:
-            failure = set(failure) == set(["true"])
-    if anomaly is not None:
-        if set(anomaly) == set(["true", "false"]):
-            anomaly = None
-        else:
-            anomaly = set(anomaly) == set(["true"])
-    if confirmed is not None:
-        if set(confirmed) == set(["true", "false"]):
-            confirmed = None
-        else:
-            confirmed = set(confirmed) == set(["true"])
+    failure = (failure and failure.lower() == "true")
+    anomaly = (anomaly and anomaly.lower() == "true")
+    confirmed = (confirmed and confirmed.lower() == "true")
 
     try:
         if since is not None:
