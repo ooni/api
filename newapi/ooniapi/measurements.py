@@ -4,7 +4,7 @@ The routes are mounted under /api
 """
 
 from csv import DictWriter
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from dateutil.parser import parse as parse_date
 from io import StringIO
 from pathlib import Path
@@ -617,13 +617,17 @@ def list_measurements():
     confirmed = (confirmed and confirmed.lower() == "true")
 
     try:
-        if since is not None:
+        if since is None:
+            since = date.today() - timedelta(days=30)
+        else:
             since = parse_date(since)
     except ValueError:
         raise BadRequest("Invalid since")
 
     try:
-        if until is not None:
+        if until is None:
+            until = date.today() + timedelta(days=1)
+        else:
             until = parse_date(until)
     except ValueError:
         raise BadRequest("Invalid until")
