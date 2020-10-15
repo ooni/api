@@ -16,6 +16,7 @@ from flask.json import jsonify
 
 # import jwt  # debdeps: python3-jwt
 
+from ooniapi.config import metrics
 from ooniapi.utils import cachedjson
 
 probe_services_blueprint = Blueprint("ps_api", "probe_services")
@@ -29,6 +30,7 @@ def req_json():
 
 
 @probe_services_blueprint.route("/api/v1/collectors")
+@metrics.timer("list_collectors")
 def list_collectors():
     """Probe Services: list collectors
     ---
@@ -57,6 +59,7 @@ def list_collectors():
 
 
 @probe_services_blueprint.route("/api/v1/test-helpers")
+@metrics.timer("list_test_helpers")
 def list_test_helpers():
     """Probe Services: List test helpers
     ---
@@ -209,6 +212,7 @@ def bouncer_net_tests():
 
 
 @probe_services_blueprint.route("/report", methods=["POST"])
+@metrics.timer("open_report")
 def open_report():
     """Probe Services: Open report
     ---
@@ -284,6 +288,7 @@ def open_report():
 
 
 @probe_services_blueprint.route("/report/<report_id>", methods=["POST"])
+@metrics.timer("receive_measurement")
 def receive_measurement(report_id):
     """Probe Services: Submit measurement
     ---
@@ -322,6 +327,7 @@ def receive_measurement(report_id):
     msmt_f_tmp.write_bytes(data)
     msmt_f = msmtdir / f"{msmt_uid}.post"
     msmt_f_tmp.rename(msmt_f)
+    metrics.incr("receive_measurement_count")
 
     try:
         url = f"http://127.0.0.1:8472/{msmt_uid}"

@@ -34,6 +34,7 @@ from urllib.parse import urljoin, urlencode
 
 from ooniapi import __version__
 from ooniapi.config import REPORT_INDEX_OFFSET
+from ooniapi.config import metrics
 from ooniapi.utils import cachedjson
 
 from flask import Blueprint
@@ -73,6 +74,7 @@ def list_files():
 
 
 # FIXME respond with help message
+@metrics.timer("get_measurement")
 @api_msm_blueprint.route("/v1/measurement/<measurement_id>")
 def get_measurement(measurement_id, download=None):
     """Get one measurement by measurement_id,
@@ -303,6 +305,7 @@ def genurl(path: str, **kw) -> str:
 
 
 @api_msm_blueprint.route("/v1/raw_measurement")
+@metrics.timer("get_raw_measurement")
 def get_raw_measurement():
     """Get raw measurement body by measurement_id + input
     ---
@@ -335,6 +338,7 @@ def get_raw_measurement():
 
 
 @api_msm_blueprint.route("/v1/measurement_meta")
+@metrics.timer("get_measurement_meta")
 def get_measurement_meta():
     """Get metadata on one measurement by measurement_id + input
     ---
@@ -430,6 +434,7 @@ def _merge_results(tmpresults):
 
 
 @api_msm_blueprint.route("/v1/measurements")
+@metrics.timer("list_measurements")
 def list_measurements():
     """Search for measurements using only the database. Provide pagination.
     ---
@@ -866,6 +871,7 @@ def _convert_to_csv(r) -> str:
 
 
 @api_msm_blueprint.route("/v1/aggregation")
+@metrics.timer("get_aggregated")
 def get_aggregated():
     """Aggregate counters data
     ---
