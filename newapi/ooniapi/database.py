@@ -68,6 +68,8 @@ def init_db(app):
 
     # Set query duration limits (in milliseconds)
     app.db_session.execute(
+        #"SET seq_page_cost=2;"
+        #"SET enable_seqscan=off;"
         "SET idle_in_transaction_session_timeout = 6000000"
     )
 
