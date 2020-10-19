@@ -623,7 +623,8 @@ def list_measurements():
 
     try:
         if since is None:
-            since = date.today() - timedelta(days=30)
+            if report_id is None:
+                since = date.today() - timedelta(days=30)
         else:
             since = parse_date(since)
     except ValueError:
@@ -631,7 +632,8 @@ def list_measurements():
 
     try:
         if until is None:
-            until = date.today() + timedelta(days=1)
+            if report_id is None:
+                until = date.today() + timedelta(days=1)
         else:
             until = parse_date(until)
     except ValueError:
