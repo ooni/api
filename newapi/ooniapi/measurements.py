@@ -15,6 +15,7 @@ import logging
 import math
 import time
 
+#import yaml
 import lz4framed
 
 import ujson
@@ -167,7 +168,8 @@ def _fetch_autoclaved_measurement_body_from_s3(
 def _fetch_jsonl_measurement_body_inner(s3path: str, linenum: int,) -> bytes:
     log = current_app.logger
     REQID_HDR = "X-Request-ID"
-    BASEURL = "https://ooni-data-eu-fra-test.s3.amazonaws.com/"
+    # TODO configure from file
+    BASEURL = "https://ooni-data-eu-fra.s3.amazonaws.com/"
     url = urljoin(BASEURL, s3path)
     log.info(f"Fetching {url}")
     r = urlopen(url)
