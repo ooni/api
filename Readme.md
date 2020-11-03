@@ -17,6 +17,14 @@ you only need to run the second step below (`export DATABASE_URL`) in case you w
 
 ### Running the API locally
 
+Set up a local database or a port forwarding.
+
+```bash
+ssh amsmetadb.ooni.nu  -L 0.0.0.0:15432:127.0.0.1:5432 -Snone -g -C
+```
+
+Run the API
+
 ```bash
 tox -e run
 
