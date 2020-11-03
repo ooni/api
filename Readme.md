@@ -6,10 +6,9 @@ Source for https://api.ooni.io/
 
 ### Requirements
 
-* Docker
-* Make
-* Python >= 3.5
+* Python 3.7.x
 * Postgresql
+* tox
 
 ### Quickstart
 
