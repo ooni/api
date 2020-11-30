@@ -56,6 +56,8 @@ def check_in():
               type: boolean
             charging:
               type: boolean
+            run_type:
+              type: string
             web_connectivity:
               type: object
               properties:
@@ -86,6 +88,7 @@ def check_in():
         data = req_json()
         probe_cc = data.get("probe_cc", "").upper()
         category_codes = param("category_codes") or ""
+        run_type = param("run_type") or "timed"
     except:
         probe_cc = "ZZ"
         category_codes = ""
