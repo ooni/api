@@ -258,6 +258,8 @@ def test_url_prioritization(client):
         "pages": 1,
     }
 
+    assert len(set(r["url"] for r in c["results"])) == 100
+
 
 def test_url_prioritization_category_code(client):
     c = getjson(client, "/api/v1/test-list/urls?category_code=NEWS")
@@ -271,6 +273,8 @@ def test_url_prioritization_category_code(client):
     }
     for r in c["results"]:
         assert r["category_code"] == "NEWS"
+
+    assert len(set(r["url"] for r in c["results"])) == 100
 
 
 def test_url_prioritization_category_codes(client):
@@ -286,6 +290,8 @@ def test_url_prioritization_category_codes(client):
     for r in c["results"]:
         assert r["category_code"] in ("NEWS", "HUMR")
 
+    assert len(set(r["url"] for r in c["results"])) == 100
+
 
 def test_url_prioritization_country_code(client):
     c = getjson(client, "/api/v1/test-list/urls?country_code=US&limit=999")
@@ -299,3 +305,5 @@ def test_url_prioritization_country_code(client):
     }
     for r in c["results"]:
         assert r["country_code"] in ("XX", "US")
+
+    assert len(set(r["url"] for r in c["results"])) == 999

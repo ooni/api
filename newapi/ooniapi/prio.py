@@ -2,7 +2,8 @@
 OONI Probe Services API - URL prioritization
 """
 
-from typing import List
+from collections import namedtuple
+from typing import List, Dict
 import random
 import time
 
@@ -13,43 +14,31 @@ from ooniapi.config import metrics
 
 prio_bp = Blueprint("prio", "probe_services_prio")
 
-# TODO  add unit tests
-
-failover_test_items = {}
-
 
 # # failover algorithm
 
+CTZ = namedtuple("CTZ", ["priority", "url", "category_code"])
+failover_test_items: Dict[str, List[CTZ]] = {}
+
 
 @metrics.timer("fetch_citizenlab_data")
-def fetch_citizenlab_data():
+def fetch_citizenlab_data() -> Dict[str, List[CTZ]]:
     """Fetch the citizenlab table from the database"""
     log = current_app.logger
     log.info("Started fetch_citizenlab_data")
+    sql = """SELECT category_code, priority, url
+    FROM citizenlab
+    WHERE cc = 'ZZ'
+    """
+    out: Dict[str, List[CTZ]] = {}
+    query = current_app.db_session.execute(sql)
+    for e in query:
+        catcode = e["category_code"]
+        c = CTZ(e["priority"], e["url"], catcode)
+        out.setdefault(catcode, []).append(c)
 
-    log.info("Regenerating URL prioritization file")
-    sql = """SELECT priority, domain, url, cc, category_code FROM citizenlab"""
-    q = current_app.db_session.execute(sql)
-    entries = list(q.fetchall())
-
-    # Create dict: cc -> category_code -> [entry, ... ]
-    entries_by_country = {}
-    for e in entries:
-        country = e["cc"].upper()
-        if country not in entries_by_country:
-            entries_by_country[country] = {}
-        ccode = e["category_code"]
-        entries_by_country[country].setdefault(ccode, []).append(e)
-
-    # Merge ZZ into each country, so that "global" urls are given out to probes
-    # from every country. Also keep ZZ as valid cc in case a probe requests it
-    zz = entries_by_country["ZZ"]
-    for ccode, country_dict in entries_by_country.items():
-        for category_code, prio_test_items in zz.items():
-            country_dict.setdefault(category_code, []).extend(prio_test_items)
-
-    log.info("Update done: %d" % len(entries_by_country))
-    return entries_by_country
+    log.info("Fetch done: %d" % len(out))
+    return out
 
 
 def algo_chao(s: List, k: int) -> List:
@@ -60,10 +49,10 @@ def algo_chao(s: List, k: int) -> List:
     r = s[:k]
     assert len(r) == k
     for i in range(0, n):
-        wsum = wsum + s[i]["priority"]
+        wsum = wsum + s[i].priority
         if i < k:
             continue
-        p = s[i]["priority"] / wsum  # probability for this item
+        p = s[i].priority / wsum  # probability for this item
         j = random.random()
         if j <= p:
             pos = random.randint(0, k - 1)
@@ -74,34 +63,23 @@ def algo_chao(s: List, k: int) -> List:
 
 def failover_generate_test_list(country_code: str, category_codes: tuple, limit: int):
     global failover_test_items
-    log = current_app.logger
-    candidates_d = failover_test_items[
-        country_code
-    ]  # category_code -> [test_item, ... ]
-
     if not category_codes:
-        category_codes = candidates_d.keys()
+        category_codes = tuple(failover_test_items.keys())
 
-    candidates = []
-    for ccode in category_codes:
-        s = candidates_d.get(ccode, [])
-        candidates.extend(s)
-
-    log.info("%d candidates", len(candidates))
+    log = current_app.logger
+    candidates: List[CTZ] = []
+    for catcode in category_codes:
+        if catcode not in failover_test_items:
+            continue
+        new = failover_test_items[catcode]
+        candidates.extend(new)
 
     limit = min(limit, len(candidates))
     selected = algo_chao(candidates, limit)
-
-    out = []
-    for entry in selected:
-        cc = "XX" if entry["cc"] == "ZZ" else entry["cc"].upper()
-        out.append(
-            {
-                "category_code": entry["category_code"],
-                "url": entry["url"],
-                "country_code": cc,
-            }
-        )
+    out = [
+        dict(category_code=entry.category_code, url=entry.url, country_code="XX")
+        for entry in selected
+    ]
     return out
 
 
@@ -146,8 +124,7 @@ ORDER BY COALESCE(msmt_cnt, 0)::float / GREATEST(priority, 1)
 
 @metrics.timer("generate_test_list")
 def generate_test_list(country_code: str, category_codes: tuple, limit: int):
-    """
-    """
+    """"""
     log = current_app.logger
     out = []
     li = fetch_reactive_url_list(country_code)
