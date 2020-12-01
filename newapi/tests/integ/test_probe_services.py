@@ -273,11 +273,25 @@ def test_url_prioritization_category_code(client):
         assert r["category_code"] == "NEWS"
 
 
-def test_url_prioritization_country_code(client):
-    c = getjson(client, "/api/v1/test-list/urls?country_code=US")
+def test_url_prioritization_category_codes(client):
+    c = getjson(client, "/api/v1/test-list/urls?category_code=NEWS,HUMR&country_code=US")
     assert "metadata" in c
     assert c["metadata"] == {
         "count": 100,
+        "current_page": -1,
+        "limit": -1,
+        "next_url": "",
+        "pages": 1,
+    }
+    for r in c["results"]:
+        assert r["category_code"] in ("NEWS", "HUMR")
+
+
+def test_url_prioritization_country_code(client):
+    c = getjson(client, "/api/v1/test-list/urls?country_code=US&limit=999")
+    assert "metadata" in c
+    assert c["metadata"] == {
+        "count": 999,
         "current_page": -1,
         "limit": -1,
         "next_url": "",

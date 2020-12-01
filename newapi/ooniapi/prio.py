@@ -9,19 +9,23 @@ import time
 from flask import Blueprint, current_app, request
 from flask.json import jsonify
 
+from ooniapi.config import metrics
+
 prio_bp = Blueprint("prio", "probe_services_prio")
 
 # TODO  add unit tests
 
-test_items = {}
-last_update_time = 0
+failover_test_items = {}
 
 
-def update_url_prioritization():
+# # failover algorithm
+
+
+@metrics.timer("fetch_citizenlab_data")
+def fetch_citizenlab_data():
+    """Fetch the citizenlab table from the database"""
     log = current_app.logger
-    log.info("Started update_url_prioritization")
-    # conn = connect_db(conf)
-    # cur = conn.cursor(cursor_factory=RealDictCursor)
+    log.info("Started fetch_citizenlab_data")
 
     log.info("Regenerating URL prioritization file")
     sql = """SELECT priority, domain, url, cc, category_code FROM citizenlab"""
@@ -49,8 +53,7 @@ def update_url_prioritization():
 
 
 def algo_chao(s: List, k: int) -> List:
-    """Chao weighted random sampling
-    """
+    """Chao weighted random sampling"""
     n = len(s)
     assert len(s) >= k
     wsum = 0
@@ -69,22 +72,14 @@ def algo_chao(s: List, k: int) -> List:
     return r
 
 
-def generate_test_list(country_code: str, category_codes: str, limit: int):
-    global test_items, last_update_time
+def failover_generate_test_list(country_code: str, category_codes: tuple, limit: int):
+    global failover_test_items
     log = current_app.logger
+    candidates_d = failover_test_items[
+        country_code
+    ]  # category_code -> [test_item, ... ]
 
-    if last_update_time < time.time() - 600:  # conf.refresh_interval:
-        last_update_time = time.time()
-        try:
-            test_items = update_url_prioritization()
-        except Exception as e:
-            log.error(e, exc_info=1)
-
-    candidates_d = test_items[country_code]  # category_code -> [test_item, ... ]
-
-    if category_codes:
-        category_codes = [c.strip().upper() for c in category_codes.split(",")]
-    else:
+    if not category_codes:
         category_codes = candidates_d.keys()
 
     candidates = []
@@ -94,8 +89,6 @@ def generate_test_list(country_code: str, category_codes: str, limit: int):
 
     log.info("%d candidates", len(candidates))
 
-    if limit == -1:
-        limit = 100
     limit = min(limit, len(candidates))
     selected = algo_chao(candidates, limit)
 
@@ -110,6 +103,73 @@ def generate_test_list(country_code: str, category_codes: str, limit: int):
             }
         )
     return out
+
+
+# # reactive algorithm
+
+
+@metrics.timer("fetch_reactive_url_list")
+def fetch_reactive_url_list(cc: str):
+    """Fetch test URL from the citizenlab table in the database
+    weighted by the amount of measurements in the last N days
+    """
+    log = current_app.logger
+    log.info("Started fetch_reactive_url_list")
+
+    sql = """
+SELECT category_code, url, cc
+FROM (
+    SELECT priority, url, cc, category_code
+    FROM citizenlab
+    WHERE
+      UPPER(citizenlab.cc) = :cc
+      OR citizenlab.cc = 'ZZ'
+) AS citiz
+LEFT OUTER JOIN (
+    SELECT input, SUM(measurement_count) AS msmt_cnt
+    FROM counters
+    WHERE
+        measurement_start_day < CURRENT_DATE + interval '1 days'
+        AND measurement_start_day > CURRENT_DATE - interval '8 days'
+        AND probe_cc = :cc
+        AND test_name = 'web_connectivity'
+    GROUP BY input
+) AS cnt
+ON (citiz.url = cnt.input)
+ORDER BY COALESCE(msmt_cnt, 0)::float / GREATEST(priority, 1)
+"""
+    q = current_app.db_session.execute(sql, dict(cc=cc))
+    entries = tuple(q.fetchall())
+    log.info("%d entries", len(entries))
+    return entries
+
+
+@metrics.timer("generate_test_list")
+def generate_test_list(country_code: str, category_codes: tuple, limit: int):
+    """
+    """
+    log = current_app.logger
+    out = []
+    li = fetch_reactive_url_list(country_code)
+    for entry in li:
+        if category_codes and entry["category_code"] not in category_codes:
+            continue
+
+        cc = "XX" if entry["cc"] == "ZZ" else entry["cc"].upper()
+        out.append(
+            {
+                "category_code": entry["category_code"],
+                "url": entry["url"],
+                "country_code": cc,
+            }
+        )
+        if len(out) >= limit:
+            break
+
+    return out
+
+
+# # API entry point
 
 
 @prio_bp.route("/api/v1/test-list/urls")
@@ -130,24 +190,40 @@ def list_test_urls():
       '200':
         description: URL test list
     """
+    global failover_test_items
+    if failover_test_items == {}:  # initialize once
+        failover_test_items = fetch_citizenlab_data()
+
     log = current_app.logger
     param = request.args.get
     try:
         country_code = (param("country_code") or "ZZ").upper()
-        category_codes = param("category_code")
+        category_codes = param("category_code") or ""
+        category_codes = set(c.strip().upper() for c in category_codes.split(","))
+        category_codes.discard("")
+        category_codes = tuple(category_codes)
         limit = int(param("limit") or -1)
-        test_items = generate_test_list(country_code, category_codes, limit)
-        out = {
-            "metadata": {
-                "count": len(test_items),
-                "current_page": -1,
-                "limit": -1,
-                "next_url": "",
-                "pages": 1,
-            },
-            "results": test_items,
-        }
-        return jsonify(out)
+        if limit == -1:
+            limit = 100
     except Exception as e:
         log.error(e, exc_info=1)
         return jsonify({})
+
+    try:
+        test_items = generate_test_list(country_code, category_codes, limit)
+    except Exception as e:
+        log.error(e, exc_info=1)
+        # failover_generate_test_list runs without any database interaction
+        test_items = failover_generate_test_list(country_code, category_codes, limit)
+
+    out = {
+        "metadata": {
+            "count": len(test_items),
+            "current_page": -1,
+            "limit": -1,
+            "next_url": "",
+            "pages": 1,
+        },
+        "results": test_items,
+    }
+    return jsonify(out)
