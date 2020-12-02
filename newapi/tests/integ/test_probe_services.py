@@ -262,7 +262,7 @@ def test_url_prioritization(client):
 
 
 def test_url_prioritization_category_code(client):
-    c = getjson(client, "/api/v1/test-list/urls?category_code=NEWS")
+    c = getjson(client, "/api/v1/test-list/urls?category_codes=NEWS")
     assert "metadata" in c
     assert c["metadata"] == {
         "count": 100,
@@ -278,7 +278,7 @@ def test_url_prioritization_category_code(client):
 
 
 def test_url_prioritization_category_codes(client):
-    c = getjson(client, "/api/v1/test-list/urls?category_code=NEWS,HUMR&country_code=US")
+    c = getjson(client, "/api/v1/test-list/urls?category_codes=NEWS,HUMR&country_code=US")
     assert "metadata" in c
     assert c["metadata"] == {
         "count": 100,

@@ -165,7 +165,7 @@ def list_test_urls():
         in: query
         type: string
         description: Two letter, uppercase country code
-      - name: category_code
+      - name: category_codes
         in: query
         type: string
         description: Comma separated list of URL categories, all uppercase
@@ -181,7 +181,7 @@ def list_test_urls():
     param = request.args.get
     try:
         country_code = (param("country_code") or "ZZ").upper()
-        category_codes = param("category_code") or ""
+        category_codes = param("category_codes") or ""
         category_codes = set(c.strip().upper() for c in category_codes.split(","))
         category_codes.discard("")
         category_codes = tuple(category_codes)
