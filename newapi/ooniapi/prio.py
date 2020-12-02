@@ -94,6 +94,11 @@ def fetch_reactive_url_list(cc: str):
     log = current_app.logger
     log.info("Started fetch_reactive_url_list")
 
+    # Select all citizenlab URLs for the given probe_cc + ZZ
+    # Select measurements count from the last 7 days in a left outer join
+    # Order based on msmt_cnt / priority to provide balancing
+    # When the msmt_cnt / priority ratio is the same, also use RANDOM() to
+    # shuffle. GREATEST(...) prevents division by zero.
     sql = """
 SELECT category_code, url, cc
 FROM (
@@ -114,7 +119,7 @@ LEFT OUTER JOIN (
     GROUP BY input
 ) AS cnt
 ON (citiz.url = cnt.input)
-ORDER BY COALESCE(msmt_cnt, 0)::float / GREATEST(priority, 1)
+ORDER BY COALESCE(msmt_cnt, 0)::float / GREATEST(priority, 1), RANDOM()
 """
     q = current_app.db_session.execute(sql, dict(cc=cc))
     entries = tuple(q.fetchall())
@@ -124,7 +129,8 @@ ORDER BY COALESCE(msmt_cnt, 0)::float / GREATEST(priority, 1)
 
 @metrics.timer("generate_test_list")
 def generate_test_list(country_code: str, category_codes: tuple, limit: int):
-    """"""
+    """Generate test list based on the amount of measurements in the last N days
+    """
     log = current_app.logger
     out = []
     li = fetch_reactive_url_list(country_code)
