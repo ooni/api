@@ -1,5 +1,25 @@
 """
-OONI Probe Services API - URL prioritization
+OONI Probe Services API - reactive URL prioritization
+
+/api/v1/test-list/urls provides dynamic URL tests lists for web_connectivity
+based on the citizenlab URL list and the measurements count from the last
+7 days.
+
+The ooni-update-counters service updates the counters table at intervals
+
+The ooni-update-citizenlab service updates the citizenlab table at intervals
+
+```
+blockdiag {
+  Probes [color = "#ffeeee"];
+  "API: test-list/urls" [color = "#eeeeff"];
+  Probes -> "API: receive msmt" -> "Fastpath" -> "DB: fastpath table";
+  "DB: fastpath table" -> "ooni-update-counters service" -> "DB: counters table";
+  "DB: counters table" -> "API: test-list/urls" -> Probes;
+  "DB: citizenlab table" -> "API: test-list/urls";
+}
+```
+
 """
 
 from collections import namedtuple
