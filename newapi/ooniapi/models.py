@@ -17,6 +17,7 @@ TEST_GROUPS = {
         "tcp_connect",
         "psiphon",
         "tor",
+        "riseupvpn",
     ],
     "legacy": [
         "http_requests",
@@ -24,6 +25,10 @@ TEST_GROUPS = {
         "http_host",
         "multi_protocol_traceroute",
     ],
+    "experimental": [
+        "urlgetter",
+        "dnscheck",
+    ]
 }
 
 
