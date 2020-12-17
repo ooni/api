@@ -1,3 +1,9 @@
+ooni-api (0.16) unstable; urgency=medium
+
+  * Flip test helper, implement bogus login
+
+ -- Federico Ceratto <federico@debian.org>  Thu, 17 Dec 2020 14:12:47 +0000
+
 ooni-api (0.15) unstable; urgency=medium
 
   * Bump up test-list/urls limit
