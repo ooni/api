@@ -5,6 +5,7 @@ OONI Probe Services API
 from base64 import b64encode
 from datetime import datetime
 from os import urandom
+from time import time
 
 from pathlib import Path
 from hashlib import sha512
@@ -229,7 +230,10 @@ def login_post():
                   type: string
                   description: Expiration time
     """
-    return jsonify({"msg": "not implemented"})  # TODO
+
+    # FIXME
+    exp = int(time.time() * 3600)
+    return jsonify({"token": "not implemented", "expire": exp})
 
 # @probe_services_blueprint.route("/api/v1/test-list/tor-targets")
 # def serve_tor_targets():
