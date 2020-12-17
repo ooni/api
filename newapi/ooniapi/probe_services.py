@@ -168,14 +168,14 @@ def list_test_helpers():
         ],
         "web-connectivity": [
             {"address": "httpo://o7mcp5y4ibyjkcgs.onion", "type": "legacy"},
-            {"address": "https://wcth.ooni.io", "type": "https"},
+            {"address": "https://test-helper.ooni.org", "type": "https"},
             {
                 "address": "https://d33d1gs9kpq1c5.cloudfront.net",
                 "front": "d33d1gs9kpq1c5.cloudfront.net",
                 "type": "cloudfront",
             },
             {"address": "httpo://y3zq5fwelrzkkv3s.onion", "type": "legacy"},
-            {"address": "https://wcth.ooni.io", "type": "https"},
+            {"address": "https://test-helper.ooni.org", "type": "https"},
             {
                 "address": "https://d33d1gs9kpq1c5.cloudfront.net",
                 "front": "d33d1gs9kpq1c5.cloudfront.net",
@@ -198,6 +198,38 @@ def list_test_helpers():
 #    #decoded = jwt.decode(encoded, key, algorithms="HS256")
 #    return jsonify({"msg": "not implemented"})  # TODO
 
+@probe_services_blueprint.route("/api/v1/login", methods=["POST"])
+def login_post():
+    """Probe Services: login
+    ---
+    parameters:
+      - in: body
+        name: auth data
+        description: Username and password
+        required: true
+        schema:
+          type: object
+          properties:
+            username:
+              type: string
+            password:
+              type: string
+    responses:
+      '200':
+        description: Auth object
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                  description: Token
+                expire:
+                  type: string
+                  description: Expiration time
+    """
+    return jsonify({"msg": "not implemented"})  # TODO
 
 # @probe_services_blueprint.route("/api/v1/test-list/tor-targets")
 # def serve_tor_targets():
@@ -208,6 +240,53 @@ def list_test_helpers():
 #        description: TODO
 #    """
 #    return jsonify({"msg": "not implemented"})  # TODO
+
+
+@probe_services_blueprint.route("/api/v1/register", methods=["POST"])
+def register():
+    """Probe Services: Register
+    ---
+    parameters:
+      - in: body
+        name: register data
+        description: Registration data
+        required: true
+        schema:
+          type: object
+          properties:
+            password:
+              type: string
+            platform:
+              type: string
+            probe_asn:
+              type: string
+            probe_cc:
+              type: string
+            software_name:
+              type: string
+            software_version:
+              type: string
+            supported_tests:
+              type: array
+              items:
+                type: string
+    responses:
+      '200':
+        description: Registration confirmation
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  description: client_id
+                  type: string
+    """
+    log = current_app.logger
+    if not request.is_json:
+        return jsonify({"msg": "error: JSON expected!"})
+
+    return jsonify({"client_id": "BOGUS_CLIENT_ID"})  # FIXME
 
 
 # Unneded: we use an external test helper
