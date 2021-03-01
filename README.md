@@ -53,13 +53,14 @@ cd newapi
 First setup a local port forward with:
 
 ```bash
-ssh ams-pg-test.ooni.org -L 0.0.0.0:15432:127.0.0.1:5432 -Snone -g -C
+ssh ams-pg-test.ooni.org -L 0.0.0.0:5432:127.0.0.1:5432 -Snone -g -C
 ```
 
 Run the newapi under gunicorn:
 
 ```
-cd newapi && CONF=$(pwd)/debian/etc/ooni/api.conf gunicorn --reuse-port ooniapi.wsgi
+cd newapi
+CONF=$(pwd)/api.conf.example gunicorn --reuse-port ooniapi.wsgi
 ```
 
 ### Running the tests
