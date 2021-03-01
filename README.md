@@ -48,6 +48,20 @@ cd newapi
 ./spawnrunner pytest-3 tests/integ/test_probe_services.py
 ```
 
+### Running the API using gunicorn on macOS
+
+First setup a local port forward with:
+
+```bash
+ssh ams-pg-test.ooni.org -L 0.0.0.0:15432:127.0.0.1:5432 -Snone -g -C
+```
+
+Run the newapi under gunicorn:
+
+```
+cd newapi && CONF=$(pwd)/debian/etc/ooni/api.conf gunicorn --reuse-port ooniapi.wsgi
+```
+
 ### Running the tests
 
 Run the integration tests:
@@ -66,7 +80,7 @@ Clone the API repository.
 Set up a local database or a port forwarding.
 
 ```bash
-ssh amsmetadb.ooni.nu  -L 0.0.0.0:5432:127.0.0.1:5432 -Snone -g -C
+ssh ams-pg-test.ooni.org -L 0.0.0.0:15432:127.0.0.1:5432 -Snone -g -C
 ```
 
 Create a new test in tests/integ/test_integration.py and run it with:
