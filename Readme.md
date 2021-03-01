@@ -68,10 +68,9 @@ CONF=$(pwd)/api.conf.example gunicorn --reuse-port ooniapi.wsgi
 Run the integration tests:
 
 ```bash
-tox -q -e integ
+cd newapi
 
-# Run only test_list_measurements* tests, stop on first failure, monitor file changes and rerun failed tests
-tox -q -e integ -k test_list_measurements -x -f
+CONF=$(pwd)/api.conf.example pytest -k test_aggregation  -vvv
 ```
 
 ### Bug fix micro-tutorial
@@ -81,13 +80,13 @@ Clone the API repository.
 Set up a local database or a port forwarding.
 
 ```bash
-ssh ams-pg-test.ooni.org -L 0.0.0.0:15432:127.0.0.1:5432 -Snone -g -C
+ssh ams-pg-test.ooni.org -L 0.0.0.0:5432:127.0.0.1:5432 -Snone -g -C
 ```
 
-Create a new test in tests/integ/test_integration.py and run it with:
+Create a new test in `tests/integ/test_integration.py` and run it with:
 
 ```bash
-tox -e integ -- -s --show-capture=no -k test_bug_12345_blah
+CONF=$(pwd)/api.conf.example pytest tests/integ/test_integration.py -k test_bug_12345_blah
 ```
 
 Fix the bug and send a pull request for the bugfix and test together.
