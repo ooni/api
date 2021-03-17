@@ -20,9 +20,9 @@ except:
 
 from flasgger import Swagger
 
-from flask_mail import Mail  # debdeps: python3-flask-mail
+#from flask_mail import Mail  # debdeps: python3-flask-mail
 
-from flask_security import Security  # debdeps: python3-flask-security
+#from flask_security import Security  # debdeps: python3-flask-security
 
 from decimal import Decimal
 from ooniapi.database import init_db
@@ -62,11 +62,13 @@ def validate_conf(app, conffile):
         "COLLECTORS",
         "DATABASE_STATEMENT_TIMEOUT",
         "DATABASE_URI_RO",
+        "JWT_ENCRYPTION_KEY",
         "MAIL_PASSWORD",
         "MAIL_PORT",
         "MAIL_SERVER",
         "MAIL_USERNAME",
         "MAIL_USE_SSL",
+        "MAIL_SOURCE_ADDRESS",
         "MSMT_SPOOL_DIR",
         "S3_ACCESS_KEY_ID",
         "S3_ENDPOINT_URL",
@@ -161,7 +163,7 @@ def create_app(*args, testmode=False, **kw):
 
     Swagger(app, parse=True)
 
-    mail = Mail(app)
+    #mail = Mail(app)
 
     security = Security(app, app.db_session)
 

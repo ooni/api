@@ -2,8 +2,8 @@
 OONI Probe Services API
 """
 
-from base64 import b64encode
-from datetime import datetime
+from base64 import b64encode, urlsafe_b64encode, urlsafe_b64decode
+from datetime import datetime, timedelta
 from os import urandom
 
 from pathlib import Path
@@ -14,7 +14,8 @@ import ujson
 from flask import Blueprint, current_app, request, make_response
 from flask.json import jsonify
 
-# import jwt  # debdeps: python3-jwt
+import jwt  # debdeps: python3-jwt
+#from nacl.signing import SigningKey
 
 from ooniapi.config import metrics
 from ooniapi.utils import cachedjson
@@ -28,6 +29,7 @@ def req_json():
     # Some probes are not setting the JSON mimetype.
     # if request.is_json():
     #    return request.json
+    # TODO: switch to request.get_json(force=True) ?
     return ujson.loads(request.data)
 
 
@@ -178,8 +180,7 @@ def check_in():
         tests={
             "web_connectivity": {"urls": test_items},
         },
-        conf={
-        }
+        conf={},
     )
 
     # get asn, asn_i, probe_cc, network name
@@ -242,6 +243,154 @@ def list_collectors():
         },
     ]
     return cachedjson(1, j)
+
+
+## Probe authentication
+
+"""
+Workflow:
+  Probes:
+    - register and received a client_id token
+    - call login_post and receive a temporary token
+    - call check-in with the temporary token
+    - call <TODO> to get Psiphon configs / Tor ipaddrs
+"""
+
+
+@probe_services_blueprint.route("/api/v1/register", methods=["POST"])
+def probe_register():
+    """Probe Services: Register
+    Probes send a random string called password and receive a client_id
+    The client_id/password tuple is saved by the probe and long-lived
+
+    ---
+    parameters:
+      - in: body
+        name: register data
+        description: Registration data
+        required: true
+        schema:
+          type: object
+          properties:
+            password:
+              type: string
+            platform:
+              type: string
+            probe_asn:
+              type: string
+            probe_cc:
+              type: string
+            software_name:
+              type: string
+            software_version:
+              type: string
+            supported_tests:
+              type: array
+              items:
+                type: string
+    responses:
+      '200':
+        description: Registration confirmation
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  description: client_id
+                  type: string
+    """
+    """
+    From client_id
+    """
+    log = current_app.logger
+    if not request.is_json:
+        return jsonify({"msg": "error: JSON expected!"})
+
+    key = "SECRET"  # FIXME
+    now = datetime.utcnow()
+    # client_id is a JWT token with "issued at" claim and
+    # "audience" claim
+    payload = {"iat": now, "aud": "probe_login"}
+    client_id = jwt.encode(payload, key, algorithm="HS256")
+    client_id = client_id.decode()
+    log.info("register successful")
+    return jsonify({"client_id": client_id})
+
+
+@probe_services_blueprint.route("/api/v1/login", methods=["POST"])
+def probe_login_post():
+    """Probe Services: login
+    ---
+    parameters:
+      - in: body
+        name: auth data
+        description: Username and password
+        required: true
+        schema:
+          type: object
+          properties:
+            username:
+              type: string
+            password:
+              type: string
+    responses:
+      '200':
+        description: Auth object
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                  description: Token
+                expire:
+                  type: string
+                  description: Expiration time
+    """
+    log = current_app.logger
+    try:
+        data = req_json()
+    except Exception as e:
+        log.error(e)
+        return jerror("JSON expected")
+
+    key = "SECRET"  # FIXME
+
+    token = data.get("username")
+    try:
+        dec = jwt.decode(token, key, algorithm="HS256")
+        if dec.get("aud") != "probe_login":
+            return jerror("Invalid credentials", code=401)
+        registration_time = dec["iat"]
+        log.info("login successful")
+    except jwt.exceptions.InvalidSignatureError:
+        return jerror("Invalid credentials", code=401)
+    except jwt.exceptions.DecodeError:
+        # Not a JWT token: treat it as a "legacy" login
+        # return jerror("Invalid or missing credentials", code=401)
+        log.info("legacy login successful")
+        registration_time = None
+
+    exp = datetime.utcnow() + timedelta(days=7)
+    payload = {"registration_time": registration_time, "aud": "probe_token"}
+    token = jwt.encode(payload, key, algorithm="HS256").decode()
+    # expiration string used by the probe e.g. 2006-01-02T15:04:05Z07:00
+    expire = exp.strftime("%Y-%m-%dT%H:%M:%SZ00:00")
+    return jsonify(token=token, expire=expire)
+
+
+# UNUSED
+# @probe_services_blueprint.route("/api/v1/update/<clientID>", methods=["PUT"])
+# def api_update(clientID):
+#     """Probe Services
+#     ---
+#     responses:
+#       '200':
+#         description: TODO
+#     """
+#     return jsonify({"msg": "not implemented"})  # TODO
 
 
 @probe_services_blueprint.route("/api/v1/test-helpers")
