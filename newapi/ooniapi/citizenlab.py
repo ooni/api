@@ -15,19 +15,61 @@ from werkzeug.exceptions import HTTPException
 logging.basicConfig(level=logging.DEBUG)
 
 VALID_URL = regex = re.compile(
-        r'^(?:http)s?://' # http:// or https://
-        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|' #domain...
-        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})' # ...or ip
-        r'(?::\d+)?' # optional port
-        r'(?:/?|[/?]\S+)$', re.IGNORECASE)
+    r"^(?:http)s?://"  # http:// or https://
+    r"(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|"  # domain...
+    r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"  # ...or ip
+    r"(?::\d+)?"  # optional port
+    r"(?:/?|[/?]\S+)$",
+    re.IGNORECASE,
+)
 
 BAD_CHARS = ["\r", "\n", "\t", "\\"]
 
-CATEGORY_CODES = {'ALDR': 'Alcohol & Drugs', 'REL': 'Religion', 'PORN': 'Pornography', 'PROV': 'Provocative Attire', 'POLR': 'Political Criticism', 'HUMR': 'Human Rights Issues', 'ENV': 'Environment', 'MILX': 'Terrorism and Militants', 'HATE': 'Hate Speech', 'NEWS': 'News Media', 'XED': 'Sex Education', 'PUBH': 'Public Health', 'GMB': 'Gambling', 'ANON': 'Anonymization and circumvention tools', 'DATE': 'Online Dating', 'GRP': 'Social Networking', 'LGBT': 'LGBT', 'FILE': 'File-sharing', 'HACK': 'Hacking Tools', 'COMT': 'Communication Tools', 'MMED': 'Media sharing', 'HOST': 'Hosting and Blogging Platforms', 'SRCH': 'Search Engines', 'GAME': 'Gaming', 'CULTR': 'Culture', 'ECON': 'Economics', 'GOVT': 'Government', 'COMM': 'E-commerce', 'CTRL': 'Control content', 'IGO': 'Intergovernmental Organizations', 'MISC': 'Miscelaneous content'}
+CATEGORY_CODES = {
+    "ALDR": "Alcohol & Drugs",
+    "REL": "Religion",
+    "PORN": "Pornography",
+    "PROV": "Provocative Attire",
+    "POLR": "Political Criticism",
+    "HUMR": "Human Rights Issues",
+    "ENV": "Environment",
+    "MILX": "Terrorism and Militants",
+    "HATE": "Hate Speech",
+    "NEWS": "News Media",
+    "XED": "Sex Education",
+    "PUBH": "Public Health",
+    "GMB": "Gambling",
+    "ANON": "Anonymization and circumvention tools",
+    "DATE": "Online Dating",
+    "GRP": "Social Networking",
+    "LGBT": "LGBT",
+    "FILE": "File-sharing",
+    "HACK": "Hacking Tools",
+    "COMT": "Communication Tools",
+    "MMED": "Media sharing",
+    "HOST": "Hosting and Blogging Platforms",
+    "SRCH": "Search Engines",
+    "GAME": "Gaming",
+    "CULTR": "Culture",
+    "ECON": "Economics",
+    "GOVT": "Government",
+    "COMM": "E-commerce",
+    "CTRL": "Control content",
+    "IGO": "Intergovernmental Organizations",
+    "MISC": "Miscelaneous content",
+}
+
 
 class ProgressPrinter(git.RemoteProgress):
     def update(self, op_code, cur_count, max_count=None, message=""):
-        print(op_code, cur_count, max_count, cur_count / (max_count or 100.0), message or "NO MESSAGE")
+        print(
+            op_code,
+            cur_count,
+            max_count,
+            cur_count / (max_count or 100.0),
+            message or "NO MESSAGE",
+        )
+
 
 class URLListManager:
     def __init__(self, working_dir, push_repo, master_repo, github_token, ssh_key_path):
@@ -47,9 +89,7 @@ class URLListManager:
         if not os.path.exists(self.repo_dir):
             logging.debug("cloning repo")
             repo = git.Repo.clone_from(
-                    f"git@github.com:{self.master_repo}.git",
-                    self.repo_dir,
-                    branch="master"
+                f"git@github.com:{self.master_repo}.git", self.repo_dir, branch="master"
             )
             repo.create_remote("rworigin", f"git@github.com:{self.push_repo}.git")
         repo = git.Repo(self.repo_dir)
@@ -57,7 +97,9 @@ class URLListManager:
         return repo
 
     def get_git_env(self):
-        return self.repo.git.custom_environment(GIT_SSH_COMMAND=f"ssh -i {self.ssh_key_path}")
+        return self.repo.git.custom_environment(
+            GIT_SSH_COMMAND=f"ssh -i {self.ssh_key_path}"
+        )
 
     def get_user_repo_path(self, username):
         return os.path.join(self.working_dir, "users", username, "test-lists")
@@ -120,7 +162,9 @@ class URLListManager:
         repo_path = self.get_user_repo_path(username)
         if not os.path.exists(repo_path):
             print(f"creating {repo_path}")
-            self.repo.git.worktree("add", "-b", self.get_user_branchname(username), repo_path)
+            self.repo.git.worktree(
+                "add", "-b", self.get_user_branchname(username), repo_path
+            )
         return git.Repo(repo_path)
 
     def get_test_list(self, username):
@@ -173,7 +217,9 @@ class URLListManager:
         filepath = os.path.join(self.get_user_repo_path(username), "lists", f"{cc}.csv")
 
         with open(filepath, "a") as out_file:
-            csv_writer = csv.writer(out_file, quoting=csv.QUOTE_MINIMAL, lineterminator="\n")
+            csv_writer = csv.writer(
+                out_file, quoting=csv.QUOTE_MINIMAL, lineterminator="\n"
+            )
             csv_writer.writerow(new_entry)
         repo.index.add([filepath])
         repo.index.commit(comment)
@@ -196,7 +242,9 @@ class URLListManager:
         out_buffer = io.StringIO()
         with open(filepath, "r") as in_file:
             csv_reader = csv.reader(in_file)
-            csv_writer = csv.writer(out_buffer, quoting=csv.QUOTE_MINIMAL, lineterminator="\n")
+            csv_writer = csv.writer(
+                out_buffer, quoting=csv.QUOTE_MINIMAL, lineterminator="\n"
+            )
 
             found = False
             for row in csv_reader:
@@ -227,7 +275,7 @@ class URLListManager:
                 "head": head,
                 "base": "master",
                 "title": "Pull requests from the web",
-            }
+            },
         )
         j = r.json()
         logging.debug(j)
@@ -244,9 +292,9 @@ class URLListManager:
     def push_to_repo(self, username):
         with self.get_git_env():
             self.repo.remotes.rworigin.push(
-                    self.get_user_branchname(username),
-                    progress=ProgressPrinter(),
-                    force=True
+                self.get_user_branchname(username),
+                progress=ProgressPrinter(),
+                force=True,
             )
 
     def propose_changes(self, username):
@@ -260,21 +308,26 @@ class URLListManager:
         self.set_pr_id(username, pr_id)
         self.set_state(username, "PR_OPEN")
 
+
 class BadURL(HTTPException):
     code = 400
     description = "Bad URL"
+
 
 class BadCategoryCode(HTTPException):
     code = 400
     description = "Bad category code"
 
+
 class BadCategoryDescription(HTTPException):
     code = 400
     description = "Bad category description"
 
+
 class BadDate(HTTPException):
     code = 400
     description = "Bad date"
+
 
 def check_url(url):
     if not VALID_URL.match(url):
@@ -286,6 +339,7 @@ def check_url(url):
     elif urlparse(url).path == "":
         raise BadURL()
 
+
 def validate_entry(entry):
     url, category_code, category_desc, date_str, user, notes = entry
     check_url(url)
@@ -294,10 +348,14 @@ def validate_entry(entry):
     if category_desc != CATEGORY_CODES[category_code]:
         raise BadCategoryDescription()
     try:
-        if datetime.datetime.strptime(date_str, "%Y-%m-%d").date().isoformat() != date_str:
+        if (
+            datetime.datetime.strptime(date_str, "%Y-%m-%d").date().isoformat()
+            != date_str
+        ):
             raise BadDate()
     except:
         raise BadDate()
+
 
 def get_url_list_manager():
     return URLListManager(
@@ -305,13 +363,16 @@ def get_url_list_manager():
         ssh_key_path=os.path.expanduser("~/.ssh/id_rsa_ooni-bot"),
         master_repo="hellais/test-lists",
         push_repo="ooni-bot/test-lists",
-        github_token=github_token
+        github_token=github_token,
     )
+
 
 def get_username():
     return "antani"
 
+
 app = Flask(__name__)
+
 
 @app.route("/api/v1/url-submission/test-list", methods=["GET"])
 def get_test_list():
@@ -319,6 +380,7 @@ def get_test_list():
 
     ulm = get_url_list_manager()
     return ulm.get_test_list(username)
+
 
 @app.route("/api/v1/url-submission/add-url", methods=["POST"])
 def url_submission_add_url():
@@ -348,13 +410,13 @@ def url_submission_add_url():
     ulm = get_url_list_manager()
     validate_entry(request.json["new_entry"])
     ulm.add(username, request.json["country_code"], request.json["new_entry"])
-    return {
-        "status": "ok"
-    }
+    return {"status": "ok"}
+
 
 @app.route("/api/v1/url-submission/edit-url", methods=["POST"])
 def url_submission_edit_url():
     pass
+
 
 def main():
     with open("GITHUB_TOKEN") as in_file:
@@ -365,35 +427,40 @@ def main():
         ssh_key_path=os.path.expanduser("~/.ssh/id_rsa_ooni-bot"),
         master_repo="hellais/test-lists",
         push_repo="ooni-bot/test-lists",
-        github_token=github_token
+        github_token=github_token,
     )
 
-    #test_lists = tlm.get_test_list("antani")
-    #pprint(test_lists)
-    ulm.add("antani", "it", [
-        "https://apple.com/",
-        "FILE",
-        "File-sharing",
-        "2017-04-12",
-        "",
-        ""
-    ], "add apple.com to italian test list")
-    ulm.edit("antani", "it", [
-        "http://btdigg.org/",
-        "FILE",
-        "File-sharing",
-        "2017-04-12",
-        "",
-        "Site reported to be blocked by AGCOM - Italian Autority on Communication"
-    ], [
-        "https://btdigg.org/",
-        "FILE",
-        "File-sharing",
-        "2017-04-12",
-        "",
-        "Site reported to be blocked by AGCOM - Italian Autority on Communication"
-    ], "add https to the website url")
+    # test_lists = tlm.get_test_list("antani")
+    # pprint(test_lists)
+    ulm.add(
+        "antani",
+        "it",
+        ["https://apple.com/", "FILE", "File-sharing", "2017-04-12", "", ""],
+        "add apple.com to italian test list",
+    )
+    ulm.edit(
+        "antani",
+        "it",
+        [
+            "http://btdigg.org/",
+            "FILE",
+            "File-sharing",
+            "2017-04-12",
+            "",
+            "Site reported to be blocked by AGCOM - Italian Autority on Communication",
+        ],
+        [
+            "https://btdigg.org/",
+            "FILE",
+            "File-sharing",
+            "2017-04-12",
+            "",
+            "Site reported to be blocked by AGCOM - Italian Autority on Communication",
+        ],
+        "add https to the website url",
+    )
     ulm.propose_changes("antani")
+
 
 if __name__ == "__main__":
     main()
