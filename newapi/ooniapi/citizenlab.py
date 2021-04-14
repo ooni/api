@@ -1,15 +1,18 @@
-import os
-import io
-import csv
-import shutil
-import logging
+
+from datetime import datetime
 from glob import glob
-from pprint import pprint
+from urllib.parse import urlparse
+import csv
+import io
+import logging
+import os
+import re
+import shutil
 
 import git
 import requests
-from requests.auth import HTTPBasicAuth
 from flask import Flask
+from requests.auth import HTTPBasicAuth
 from werkzeug.exceptions import HTTPException
 
 logging.basicConfig(level=logging.DEBUG)
@@ -120,10 +123,8 @@ class URLListManager:
         The possible states are:
         - CLEAN:
             when we are in sync with the current tip of master and no changes have been made
-        - DIRTY:
+        - IN_PROGRESS:
             when there are some changes in the working tree of the user, but they haven't yet pushed them
-        - PUSHING:
-            when we are pushing the changes made by the user via propose_changes
         - PR_OPEN:
             when the PR of the user is open on github and it's waiting for being merged
         """
@@ -139,7 +140,7 @@ class URLListManager:
 
         The absence of a statefile is an indication of a clean state.
         """
-        assert state in ("DIRTY", "PUSHING", "PR_OPEN", "CLEAN")
+        assert state in ("IN_PROGRESS", "PR_OPEN", "CLEAN")
 
         logging.debug(f"setting state for {username} to {state}")
         if state == "CLEAN":
@@ -190,10 +191,10 @@ class URLListManager:
         state = self.get_state(username)
         self.repo.remotes.origin.pull(progress=ProgressPrinter())
 
-        # If the state is CLEAN or DIRTY we don't have to do anything
+        # If the state is CLEAN or IN_PROGRESS we don't have to do anything
         if state == "CLEAN":
             return
-        if state == "DIRTY":
+        if state == "IN_PROGRESS":
             return
         if state == "PR_OPEN":
             if self.is_pr_resolved(username):
@@ -210,7 +211,7 @@ class URLListManager:
         # XXX add check to ensure the URL is not duplicate
 
         state = self.get_state(username)
-        if state in ("PUSHING", "PR_OPEN"):
+        if state in ("PR_OPEN"):
             raise Exception("You cannot edit files while changes are pending")
 
         repo = self.get_user_repo(username)
@@ -224,7 +225,7 @@ class URLListManager:
         repo.index.add([filepath])
         repo.index.commit(comment)
 
-        self.set_state(username, "DIRTY")
+        self.set_state(username, "IN_PROGRESS")
 
     def edit(self, username, cc, old_entry, new_entry, comment):
         self.sync_state(username)
@@ -232,7 +233,7 @@ class URLListManager:
         logging.debug("editing existing entry")
 
         state = self.get_state(username)
-        if state in ("PUSHING", "PR_OPEN"):
+        if state in ("PR_OPEN"):
             raise Exception("You cannot edit the files while changes are pending")
 
         repo = self.get_user_repo(username)
@@ -262,7 +263,7 @@ class URLListManager:
         repo.index.add([filepath])
         repo.index.commit(comment)
 
-        self.set_state(username, "DIRTY")
+        self.set_state(username, "IN_PROGRESS")
 
     def open_pr(self, branchname):
         head = f"{self.github_user}:{branchname}"
@@ -298,8 +299,6 @@ class URLListManager:
             )
 
     def propose_changes(self, username):
-        self.set_state(username, "PUSHING")
-
         logging.debug("proposing changes")
 
         self.push_to_repo(username)
@@ -349,7 +348,7 @@ def validate_entry(entry):
         raise BadCategoryDescription()
     try:
         if (
-            datetime.datetime.strptime(date_str, "%Y-%m-%d").date().isoformat()
+            datetime.strptime(date_str, "%Y-%m-%d").date().isoformat()
             != date_str
         ):
             raise BadDate()
