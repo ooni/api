@@ -30,7 +30,7 @@ def test_add_url_full_workflow(url_list_manager):
         ["https://apple.com/", "FILE", "File-sharing", "2017-04-12", "", ""],
         "add apple.com to italian test list",
     )
-    assert url_list_manager.get_state(username) == "DIRTY"
+    assert url_list_manager.get_state(username) == "IN_PROGRESS"
 
     url_list_manager.propose_changes(username)
     url_list_manager.push_to_repo.assert_called()
@@ -67,4 +67,4 @@ def test_edit_url(url_list_manager):
         ],
         "add https to the website url",
     )
-    assert url_list_manager.get_state(username) == "DIRTY"
+    assert url_list_manager.get_state(username) == "IN_PROGRESS"
