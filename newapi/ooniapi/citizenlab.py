@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from glob import glob
 from urllib.parse import urlparse
@@ -11,6 +10,7 @@ import shutil
 
 import git
 import requests
+from filelock import FileLock
 from flask import Flask
 from requests.auth import HTTPBasicAuth
 from werkzeug.exceptions import HTTPException
@@ -62,6 +62,8 @@ CATEGORY_CODES = {
     "MISC": "Miscelaneous content",
 }
 
+class DuplicateURL(Exception):
+    pass
 
 class ProgressPrinter(git.RemoteProgress):
     def update(self, op_code, cur_count, max_count=None, message=""):
@@ -168,28 +170,45 @@ class URLListManager:
             )
         return git.Repo(repo_path)
 
-    def get_test_list(self, username):
+    def get_user_lock(self, username):
+        lockfile_path = os.path.join(self.working_dir, "users", username, "state.lock")
+        return FileLock(lockfile_path, timeout=5)
+
+    def get_test_list(self, username, country_code):
+        if not len(country_code) == 2 and not country_code == "global":
+            raise Exception("Bad country_code")
+
         self.sync_state(username)
+        self.pull_master_repo()
 
         repo_path = self.get_user_repo_path(username)
         if not os.path.exists(repo_path):
             repo_path = self.repo_dir
 
-        test_lists = {}
-        for path in glob(os.path.join("lists", "*.csv")):
-            cc = os.path.basename(path).split(".")[0]
-            if not len(cc) == 2 and not cc == "global":
-                continue
-            with open(path) as tl_file:
-                csv_reader = csv.reader(tl_file)
-                for line in csv_reader:
-                    test_lists[cc] = test_lists.get(cc, [])
-                    test_lists[cc].append(line)
-        return test_lists
+        test_list = []
+        path = os.path.join(repo_path, "lists", f"{country_code}.csv")
+        with open(path) as tl_file:
+            csv_reader = csv.reader(tl_file)
+            for line in csv_reader:
+                test_list.append(line)
+        return test_list
+
+    def is_duplicate_url(self, username, country_code, new_url):
+        url_set = set()
+        for row in self.get_test_list(username, country_code):
+            url = row[0]
+            url_set.add(url)
+        if country_code != "global":
+            for row in self.get_test_list(username, "global"):
+                url = row[0]
+                url_set.add(url)
+        return new_url in url_set
+
+    def pull_master_repo(self):
+        self.repo.remotes.origin.pull(progress=ProgressPrinter())
 
     def sync_state(self, username):
         state = self.get_state(username)
-        self.repo.remotes.origin.pull(progress=ProgressPrinter())
 
         # If the state is CLEAN or IN_PROGRESS we don't have to do anything
         if state == "CLEAN":
@@ -200,35 +219,43 @@ class URLListManager:
             if self.is_pr_resolved(username):
                 shutil.rmtree(self.get_user_repo_path(username))
                 self.repo.git.worktree("prune")
-                self.repo.delete_head(self.get_user_branchname(username))
+                self.repo.delete_head(self.get_user_branchname(username), force=True)
 
                 self.set_state(username, "CLEAN")
 
     def add(self, username, cc, new_entry, comment):
         self.sync_state(username)
+        self.pull_master_repo()
 
         logging.debug("adding new entry")
-        # XXX add check to ensure the URL is not duplicate
 
         state = self.get_state(username)
         if state in ("PR_OPEN"):
             raise Exception("You cannot edit files while changes are pending")
 
         repo = self.get_user_repo(username)
-        filepath = os.path.join(self.get_user_repo_path(username), "lists", f"{cc}.csv")
+        with self.get_user_lock(username):
 
-        with open(filepath, "a") as out_file:
-            csv_writer = csv.writer(
-                out_file, quoting=csv.QUOTE_MINIMAL, lineterminator="\n"
+            filepath = os.path.join(
+                self.get_user_repo_path(username), "lists", f"{cc}.csv"
             )
-            csv_writer.writerow(new_entry)
-        repo.index.add([filepath])
-        repo.index.commit(comment)
 
-        self.set_state(username, "IN_PROGRESS")
+            if self.is_duplicate_url(username, cc, new_entry[0]):
+                raise DuplicateURL()
+
+            with open(filepath, "a") as out_file:
+                csv_writer = csv.writer(
+                    out_file, quoting=csv.QUOTE_MINIMAL, lineterminator="\n"
+                )
+                csv_writer.writerow(new_entry)
+            repo.index.add([filepath])
+            repo.index.commit(comment)
+
+            self.set_state(username, "IN_PROGRESS")
 
     def edit(self, username, cc, old_entry, new_entry, comment):
         self.sync_state(username)
+        self.pull_master_repo()
 
         logging.debug("editing existing entry")
 
@@ -237,33 +264,43 @@ class URLListManager:
             raise Exception("You cannot edit the files while changes are pending")
 
         repo = self.get_user_repo(username)
+        with self.get_user_lock(username):
 
-        filepath = os.path.join(self.get_user_repo_path(username), "lists", f"{cc}.csv")
-
-        out_buffer = io.StringIO()
-        with open(filepath, "r") as in_file:
-            csv_reader = csv.reader(in_file)
-            csv_writer = csv.writer(
-                out_buffer, quoting=csv.QUOTE_MINIMAL, lineterminator="\n"
+            filepath = os.path.join(
+                self.get_user_repo_path(username), "lists", f"{cc}.csv"
             )
 
-            found = False
-            for row in csv_reader:
-                if row == old_entry:
-                    found = True
-                    csv_writer.writerow(new_entry)
-                else:
-                    csv_writer.writerow(row)
-        if not found:
-            raise Exception("Could not find the specified row")
+            # If the entry we are changing differs from the previously changed
+            # entry we need to check if it's already present in the test list
+            if new_entry[0] != old_entry[0] and self.is_duplicate_url(
+                username, cc, new_entry[0]
+            ):
+                raise DuplicateURL()
 
-        with open(filepath, "w") as out_file:
-            out_buffer.seek(0)
-            shutil.copyfileobj(out_buffer, out_file)
-        repo.index.add([filepath])
-        repo.index.commit(comment)
+            out_buffer = io.StringIO()
+            with open(filepath, "r") as in_file:
+                csv_reader = csv.reader(in_file)
+                csv_writer = csv.writer(
+                    out_buffer, quoting=csv.QUOTE_MINIMAL, lineterminator="\n"
+                )
 
-        self.set_state(username, "IN_PROGRESS")
+                found = False
+                for row in csv_reader:
+                    if row == old_entry:
+                        found = True
+                        csv_writer.writerow(new_entry)
+                    else:
+                        csv_writer.writerow(row)
+            if not found:
+                raise Exception("Could not find the specified row")
+
+            with open(filepath, "w") as out_file:
+                out_buffer.seek(0)
+                shutil.copyfileobj(out_buffer, out_file)
+            repo.index.add([filepath])
+            repo.index.commit(comment)
+
+            self.set_state(username, "IN_PROGRESS")
 
     def open_pr(self, branchname):
         head = f"{self.github_user}:{branchname}"
@@ -299,13 +336,14 @@ class URLListManager:
             )
 
     def propose_changes(self, username):
-        logging.debug("proposing changes")
+        with self.get_user_lock(username):
+            logging.debug("proposing changes")
 
-        self.push_to_repo(username)
+            self.push_to_repo(username)
 
-        pr_id = self.open_pr(self.get_user_branchname(username))
-        self.set_pr_id(username, pr_id)
-        self.set_state(username, "PR_OPEN")
+            pr_id = self.open_pr(self.get_user_branchname(username))
+            self.set_pr_id(username, pr_id)
+            self.set_state(username, "PR_OPEN")
 
 
 class BadURL(HTTPException):
@@ -348,7 +386,7 @@ def validate_entry(entry):
         raise BadCategoryDescription()
     try:
         if (
-            datetime.strptime(date_str, "%Y-%m-%d").date().isoformat()
+            datetime.datetime.strptime(date_str, "%Y-%m-%d").date().isoformat()
             != date_str
         ):
             raise BadDate()
@@ -373,12 +411,12 @@ def get_username():
 app = Flask(__name__)
 
 
-@app.route("/api/v1/url-submission/test-list", methods=["GET"])
-def get_test_list():
+@app.route("/api/v1/url-submission/test-list/<country_code>", methods=["GET"])
+def get_test_list(country_code):
     username = get_username()
 
     ulm = get_url_list_manager()
-    return ulm.get_test_list(username)
+    return ulm.get_test_list(username, country_code)
 
 
 @app.route("/api/v1/url-submission/add-url", methods=["POST"])
@@ -393,6 +431,8 @@ def url_submission_add_url():
           properties:
             country_code:
               type: string
+            comment:
+              type: string
             new_entry:
               type: array
     responses:
@@ -401,20 +441,61 @@ def url_submission_add_url():
         schema:
           type: object
           properties:
-            status:
-              type: string
+            new_entry:
+              type: array
     """
     username = get_username()
 
     ulm = get_url_list_manager()
     validate_entry(request.json["new_entry"])
-    ulm.add(username, request.json["country_code"], request.json["new_entry"])
-    return {"status": "ok"}
+    ulm.add(
+        username=username,
+        cc=request.json["country_code"],
+        new_entry=request.json["new_entry"],
+        comment=request.json["comment"],
+    )
+    return {"new_entry": request.json["new_entry"]}
 
 
 @app.route("/api/v1/url-submission/edit-url", methods=["POST"])
 def url_submission_edit_url():
-    pass
+    """
+    parameters:
+      - in: body
+        name: add new URL
+        required: true
+        schema:
+          type: object
+          properties:
+            country_code:
+              type: string
+            comment:
+              type: string
+            new_entry:
+              type: array
+            old_entry:
+              type: array
+    responses:
+      '200':
+        description: New URL confirmation
+        schema:
+          type: object
+          properties:
+            new_entry:
+              type: array
+    """
+    username = get_username()
+
+    ulm = get_url_list_manager()
+    validate_entry(request.json["new_entry"])
+    ulm.edit(
+        username=username,
+        cc=request.json["country_code"],
+        old_entry=request.json["old_entry"],
+        new_entry=request.json["new_entry"],
+        comment=request.json["comment"],
+    )
+    return {"new_entry": request.json["new_entry"]}
 
 
 def main():
