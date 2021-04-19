@@ -101,7 +101,7 @@ def register_user():
     parameters:
       - in: body
         name: register data
-        description: Registration data: HTML form or JSON
+        description: Registration data as HTML form or JSON
         required: true
         schema:
           type: object
@@ -117,6 +117,8 @@ def register_user():
     log = current_app.logger
     req = request.json if request.is_json else request.form
     nick = req.get("nickname")
+    # TODO escape/cleanup nickname
+    # TODO create account id
     email_address = req.get("email_address")
     if not nick or not email_address:
         return jerror("Invalid request")
@@ -124,7 +126,7 @@ def register_user():
         return jerror("Invalid email address")
 
     now = datetime.utcnow()
-    expiration = now + timedelta(day=1)
+    expiration = now + timedelta(days=1)
     # On the backend side the registration is stateless
     payload = {
         "nbf": now,
@@ -133,28 +135,40 @@ def register_user():
         "email": email_address,
         "nick": nick,
     }
-    log.debug(payload)  # FIXME
     registration_token = create_jwt(payload)
     log.info("sending registration token")
-    send_login_email(email_address, nick, registration_token)
-    return
+    try:
+        send_login_email(email_address, nick, registration_token)
+        log.info("email sent")
+    except Exception as e:
+        log.error(e, exc_info=1)
+        return jerror("Unable to send the email")
+
+    return make_response(jsonify(msg="ok"), 200)
+
+
+def decode_jwt(token, **kw):
+    key = current_app.config["JWT_ENCRYPTION_KEY"]
+    return jwt.decode(token, key, algorithms=["HS256"], **kw)
 
 
 @auth_blueprint.route("/api/v1/user_login", methods=["GET"])
 def user_login():
     """Probe Services: login using a registration/login link
     ---
-    TODO
+    parameters:
+      - name: k
+        in: query
+        type: string
+        description: JWT token with aud=register
     responses:
-      '200':
-        description: Auth object
-        content:
+      200:
+        description: Login response, set cookie
     """
     log = current_app.logger
-    key = current_app.config["JWT_ENCRYPTION_KEY"]
     token = request.args.get("k")
     try:
-        dec = jwt.decode(token, key, algorithm="HS256")
+        dec = decode_jwt(token, audience="register")
         if dec.get("aud") != "register":
             return jerror("Invalid token type", code=401)
     except jwt.exceptions.InvalidSignatureError:
@@ -171,8 +185,7 @@ def user_login():
         "email": dec["email"],
         "nick": dec["nick"],
     }
-    log.debug(payload)  # FIXME
     token = create_jwt(payload)
-    r = make_response(token)
+    r = make_response(jsonify(token=token), 200)
     r.set_cookie("ooni", token, secure=True, httponly=True, samesite="Strict")
     return r
