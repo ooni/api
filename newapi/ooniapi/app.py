@@ -165,7 +165,7 @@ def create_app(*args, testmode=False, **kw):
 
     #mail = Mail(app)
 
-    security = Security(app, app.db_session)
+    # security = Security(app, app.db_session)
 
     # FIXME
     views.register(app)
