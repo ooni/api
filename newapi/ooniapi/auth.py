@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from email.headerregistry import Address
 from email.message import EmailMessage
 from urllib.parse import urljoin
+import hashlib
 import re
 import smtplib
 
@@ -19,6 +20,11 @@ auth_blueprint = Blueprint("auth_api", "auth")
 
 """
 Browser authentication - see probe_services.py for probe authentication
+Requirements:
+  - Never store users email address nor IP addresses nor passwords
+  - Verify email to limit spambots. Do not use capchas
+  - Support multiple sessions / devices, ability to register/login again
+
 Workflow:
   Explorer:
     - call register_user using an email and receive a temporary login link
@@ -39,6 +45,17 @@ def jerror(msg, code=400):
 def create_jwt(payload: dict) -> str:
     key = current_app.config["JWT_ENCRYPTION_KEY"]
     return jwt.encode(payload, key, algorithm="HS256").decode()
+
+
+def decode_jwt(token, **kw):
+    key = current_app.config["JWT_ENCRYPTION_KEY"]
+    return jwt.decode(token, key, algorithms=["HS256"], **kw)
+
+
+def hash_email_address(email_address: str) -> str:
+    key = current_app.config["JWT_ENCRYPTION_KEY"].encode()
+    em = email_address.encode()
+    return hashlib.blake2b(em, key=key, digest_size=16).hexdigest()
 
 
 def _send_email(dest_addr: str, msg: EmailMessage) -> None:
@@ -94,6 +111,7 @@ def send_login_email(dest_addr, nick, token: str) -> None:
     _send_email(dest_addr, msg)
 
 
+@metrics.timer("register_user")
 @auth_blueprint.route("/api/v1/register_user", methods=["POST"])
 def register_user():
     """Auth Services: start email-based user registration
@@ -116,15 +134,22 @@ def register_user():
     """
     log = current_app.logger
     req = request.json if request.is_json else request.form
-    nick = req.get("nickname")
-    # TODO escape/cleanup nickname
-    # TODO create account id
-    email_address = req.get("email_address")
+    nick = req.get("nickname").strip()
+    # Accept all alphanum including unicode and whitespaces
+    if not nick.replace(" ", "").isalnum():
+        return jerror("Invalid user name")
+    if len(nick) < 3:
+        return jerror("User name is too short")
+    if len(nick) > 50:
+        return jerror("User name is too long")
+
+    email_address = req.get("email_address").strip().lower()
     if not nick or not email_address:
         return jerror("Invalid request")
     if EMAIL_RE.fullmatch(email_address) is None:
         return jerror("Invalid email address")
 
+    account_id = hash_email_address(email_address)
     now = datetime.utcnow()
     expiration = now + timedelta(days=1)
     # On the backend side the registration is stateless
@@ -132,6 +157,7 @@ def register_user():
         "nbf": now,
         "exp": expiration,
         "aud": "register",
+        "account_id": account_id,
         "email": email_address,
         "nick": nick,
     }
@@ -147,11 +173,7 @@ def register_user():
     return make_response(jsonify(msg="ok"), 200)
 
 
-def decode_jwt(token, **kw):
-    key = current_app.config["JWT_ENCRYPTION_KEY"]
-    return jwt.decode(token, key, algorithms=["HS256"], **kw)
-
-
+@metrics.timer("user_login")
 @auth_blueprint.route("/api/v1/user_login", methods=["GET"])
 def user_login():
     """Probe Services: login using a registration/login link
@@ -182,8 +204,8 @@ def user_login():
         "nbf": now,
         "iat": now,
         "aud": "user_auth",
-        "email": dec["email"],
         "nick": dec["nick"],
+        "account_id": dec["account_id"],
     }
     token = create_jwt(payload)
     r = make_response(jsonify(token=token), 200)
