@@ -60,10 +60,15 @@ def test_login_user_bogus_token(client, mk):
 
 
 def test_register_user(client, mk):
-    d = dict(nickname="", email_address="nick@localhost")
+    d = dict(nickname="", email_address="nick@localhost.local")
     r = client.post("/api/v1/register_user", json=d)
     assert r.status_code == 400
-    assert r.json == {"error": "Invalid request"}
+    assert r.json == {"error": "Invalid user name"}
+
+    d = dict(nickname="x", email_address="nick@localhost.local")
+    r = client.post("/api/v1/register_user", json=d)
+    assert r.status_code == 400
+    assert r.json == {"error": "User name is too short"}
 
     d = dict(nickname="nick", email_address="nick@localhost")
     r = client.post("/api/v1/register_user", json=d)
