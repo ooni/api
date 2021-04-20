@@ -2,7 +2,7 @@
 OONI Probe Services API
 """
 
-from base64 import b64encode, urlsafe_b64encode, urlsafe_b64decode
+from base64 import b64encode
 from datetime import datetime, timedelta
 from os import urandom
 
@@ -144,7 +144,7 @@ def check_in():
     # we're running in the background and we don't want
     # too many URLs, in particular when running on battery.
     if run_type == "manual":
-        url_limit = 9999 # same as prio.py
+        url_limit = 9999  # same as prio.py
     elif charging:
         url_limit = 100
     else:
@@ -245,7 +245,7 @@ def list_collectors():
     return cachedjson(1, j)
 
 
-## Probe authentication
+# # Probe authentication # #
 
 """
 Workflow:
@@ -508,13 +508,12 @@ def bouncer_net_tests():
             schema:
               type: object
     """
-    log = current_app.logger
     try:
         data = req_json()
         nt = data.get("net-tests")[0]
         name = nt["name"]
         version = nt["version"]
-    except:
+    except Exception:
         return jerror("Malformed request")
 
     j = {
@@ -616,7 +615,7 @@ def open_report():
         asn = "AS0"
     try:
         asn_i = int(asn[2:])
-    except:
+    except Exception:
         asn_i = 0
     cc = data.get("probe_cc", "ZZ").upper().replace("_", "")
     if len(cc) != 2:
@@ -667,7 +666,7 @@ def receive_measurement(report_id):
     log = current_app.logger
     try:
         rid_timestamp, test_name, cc, asn, format_cid, rand = report_id.split("_")
-    except:
+    except Exception:
         log.info("Unexpected report_id %r", report_id[:200])
         return jerror("Incorrect format")
 
