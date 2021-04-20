@@ -14,12 +14,12 @@ import ujson
 from flask import Blueprint, current_app, request, make_response
 from flask.json import jsonify
 
-import jwt  # debdeps: python3-jwt
-#from nacl.signing import SigningKey
+import jwt.exceptions  # debdeps: python3-jwt
 
 from ooniapi.config import metrics
 from ooniapi.utils import cachedjson
 
+from ooniapi.auth import create_jwt, decode_jwt
 from ooniapi.prio import generate_test_list
 
 probe_services_blueprint = Blueprint("ps_api", "probe_services")
@@ -302,13 +302,11 @@ def probe_register():
     if not request.is_json:
         return jsonify({"msg": "error: JSON expected!"})
 
-    key = "SECRET"  # FIXME
     now = datetime.utcnow()
     # client_id is a JWT token with "issued at" claim and
     # "audience" claim
     payload = {"iat": now, "aud": "probe_login"}
-    client_id = jwt.encode(payload, key, algorithm="HS256")
-    client_id = client_id.decode()
+    client_id = create_jwt(payload)
     log.info("register successful")
     return jsonify({"client_id": client_id})
 
@@ -351,26 +349,26 @@ def probe_login_post():
         log.error(e)
         return jerror("JSON expected")
 
-    key = "SECRET"  # FIXME
-
     token = data.get("username")
     try:
-        dec = jwt.decode(token, key, algorithm="HS256")
-        if dec.get("aud") != "probe_login":
-            return jerror("Invalid credentials", code=401)
+        dec = decode_jwt(token, audience="probe_login")
         registration_time = dec["iat"]
-        log.info("login successful")
+        log.info("probe login successful")
+    except jwt.exceptions.MissingRequiredClaimError:
+        log.info("probe login: missing claim")
+        return jerror("Invalid credentials", code=401)
     except jwt.exceptions.InvalidSignatureError:
+        log.info("probe login: invalid signature")
         return jerror("Invalid credentials", code=401)
     except jwt.exceptions.DecodeError:
         # Not a JWT token: treat it as a "legacy" login
         # return jerror("Invalid or missing credentials", code=401)
-        log.info("legacy login successful")
+        log.info("legacy probe login successful")
         registration_time = None
 
     exp = datetime.utcnow() + timedelta(days=7)
     payload = {"registration_time": registration_time, "aud": "probe_token"}
-    token = jwt.encode(payload, key, algorithm="HS256").decode()
+    token = create_jwt(payload)
     # expiration string used by the probe e.g. 2006-01-02T15:04:05Z07:00
     expire = exp.strftime("%Y-%m-%dT%H:%M:%SZ00:00")
     return jsonify(token=token, expire=expire)
