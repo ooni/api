@@ -1,3 +1,7 @@
+"""
+Citizenlab CRUD API
+"""
+
 from datetime import datetime
 from glob import glob
 from urllib.parse import urlparse

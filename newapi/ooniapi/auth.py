@@ -14,7 +14,7 @@ from flask.json import jsonify
 import jwt  # debdeps: python3-jwt
 
 from ooniapi.config import metrics
-from ooniapi.utils import cachedjson
+# from ooniapi.utils import cachedjson
 
 auth_blueprint = Blueprint("auth_api", "auth")
 
@@ -158,7 +158,6 @@ def register_user():
         "exp": expiration,
         "aud": "register",
         "account_id": account_id,
-        "email": email_address,
         "nick": nick,
     }
     registration_token = create_jwt(payload)
@@ -204,8 +203,8 @@ def user_login():
         "nbf": now,
         "iat": now,
         "aud": "user_auth",
-        "nick": dec["nick"],
         "account_id": dec["account_id"],
+        "nick": dec["nick"],
     }
     token = create_jwt(payload)
     r = make_response(jsonify(token=token), 200)
