@@ -94,8 +94,22 @@ def test_register_user(client, mk):
 
     r = client.get(f"/api/v1/user_login?k={token}")
     assert r.status_code == 200
-    cookies = r.headers.getlist('Set-Cookie')
+    cookies = r.headers.getlist("Set-Cookie")
     assert len(cookies) == 1
     c = cookies[0]
     assert c.startswith("ooni=")
     assert c.endswith("; Secure; HttpOnly; Path=/; SameSite=Strict")
+
+
+def test_role_set(client, mk):
+    d = dict(email_address="integtest@openobservatory.org", role="admin")
+    r = client.post("/api/v1/set_account_role", json=d)
+    assert r.status_code == 200
+
+    r = client.get("/api/v1/get_account_role/integtest@openobservatory.org")
+    assert r.status_code == 200
+    assert r.data == b"admin"
+
+    d = dict(email_address="integtest@openobservatory.org", role="user")
+    r = client.post("/api/v1/set_account_role", json=d)
+    assert r.status_code == 200

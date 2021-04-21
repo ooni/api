@@ -356,7 +356,7 @@ def probe_login_post():
         registration_time = dec["iat"]
         log.info("probe login successful")
     except jwt.exceptions.MissingRequiredClaimError:
-        log.info("probe login: missing claim")
+        log.info("probe login: invalid or missing claim")
         return jerror("Invalid credentials", code=401)
     except jwt.exceptions.InvalidSignatureError:
         log.info("probe login: invalid signature")

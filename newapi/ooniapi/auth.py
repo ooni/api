@@ -14,6 +14,7 @@ from flask.json import jsonify
 import jwt  # debdeps: python3-jwt
 
 from ooniapi.config import metrics
+
 # from ooniapi.utils import cachedjson
 
 auth_blueprint = Blueprint("auth_api", "auth")
@@ -134,7 +135,7 @@ def register_user():
     """
     log = current_app.logger
     req = request.json if request.is_json else request.form
-    nick = req.get("nickname").strip()
+    nick = req.get("nickname", "").strip()
     # Accept all alphanum including unicode and whitespaces
     if not nick.replace(" ", "").isalnum():
         return jerror("Invalid user name")
@@ -143,7 +144,7 @@ def register_user():
     if len(nick) > 50:
         return jerror("User name is too long")
 
-    email_address = req.get("email_address").strip().lower()
+    email_address = req.get("email_address", "").strip().lower()
     if not nick or not email_address:
         return jerror("Invalid request")
     if EMAIL_RE.fullmatch(email_address) is None:
@@ -187,11 +188,11 @@ def user_login():
         description: Login response, set cookie
     """
     log = current_app.logger
-    token = request.args.get("k")
+    token = request.args.get("k", "")
     try:
         dec = decode_jwt(token, audience="register")
-        if dec.get("aud") != "register":
-            return jerror("Invalid token type", code=401)
+    except jwt.exceptions.MissingRequiredClaimError:
+        return jerror("Invalid token type", code=401)
     except jwt.exceptions.InvalidSignatureError:
         return jerror("Invalid credential signature", code=401)
     except jwt.exceptions.DecodeError:
@@ -210,3 +211,92 @@ def user_login():
     r = make_response(jsonify(token=token), 200)
     r.set_cookie("ooni", token, secure=True, httponly=True, samesite="Strict")
     return r
+
+
+"""
+CREATE TABLE IF NOT EXISTS accounts (
+    account_id text PRIMARY KEY,
+    role text
+);
+
+GRANT SELECT ON TABLE accounts TO amsapi;
+GRANT SELECT ON TABLE accounts TO readonly;
+
+CREATE TABLE IF NOT EXISTS account_expunge (
+    account_id text PRIMARY KEY,
+    threshold timestamp without time zone NOT NULL
+);
+GRANT SELECT ON TABLE public.account_expunge TO amsapi;
+GRANT SELECT ON TABLE public.account_expunge TO readonly;
+"""
+
+
+@auth_blueprint.route("/api/v1/set_account_role", methods=["POST"])
+def set_account_role():
+    """Set a role to a given account identified by an email address
+    ---
+    parameters:
+      - in: body
+        name: email address and role
+        description: data as HTML form or JSON
+        required: true
+        schema:
+          type: object
+          properties:
+            email_address:
+              type: string
+            role:
+              type: string
+    responses:
+      200:
+        description: Confirmation
+    """
+    log = current_app.logger
+    req = request.json if request.is_json else request.form
+    role = req.get("role", "").strip().lower()
+    email_address = req.get("email_address", "").strip().lower()
+    if EMAIL_RE.fullmatch(email_address) is None:
+        return jerror("Invalid email address")
+    if role not in ["user", "admin"]:
+        return jerror("Invalid role")
+
+    account_id = hash_email_address(email_address)
+    log.info(f"Giving account {account_id} role {role}")
+    query = """INSERT INTO accounts (account_id, role)
+        VALUES(:account_id, :role)
+        ON CONFLICT (account_id) DO
+        UPDATE SET role = EXCLUDED.role
+    """
+    query_params = dict(account_id=account_id, role=role)
+    q = current_app.db_session.execute(query, query_params).rowcount
+    log.info(f"Role set {q}")
+    current_app.db_session.commit()
+    return ""
+
+
+@auth_blueprint.route("/api/v1/get_account_role/<email_address>")
+def get_account_role(email_address):
+    """Get account role
+    ---
+    parameters:
+      - name: email_address
+        in: path
+        required: true
+        type: string
+    """
+    log = current_app.logger
+    email_address = email_address.strip().lower()
+    if EMAIL_RE.fullmatch(email_address) is None:
+        return jerror("Invalid email address")
+    account_id = hash_email_address(email_address)
+    query = "SELECT role FROM accounts WHERE account_id = :account_id"
+    query_params = dict(account_id=account_id)
+    q = current_app.db_session.execute(query, query_params)
+    r = q.fetchone()
+    if r:
+        role = r[0]
+        log.info(f"Getting account {account_id} role: {role}")
+        return role
+    else:
+        log.info(f"Getting account {account_id} role: not found")
+        return ""
