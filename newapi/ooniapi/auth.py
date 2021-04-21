@@ -76,6 +76,7 @@ def _send_email(dest_addr: str, msg: EmailMessage) -> None:
             s.send_message(msg)
     except Exception as e:
         log.error(e, exc_info=1)
+        raise
 
 
 def send_login_email(dest_addr, nick, token: str) -> None:
@@ -276,7 +277,7 @@ def set_account_role():
 
 @auth_blueprint.route("/api/v1/get_account_role/<email_address>")
 def get_account_role(email_address):
-    """Get account role
+    """Get account role. Return an empty string if the account is not found.
     ---
     parameters:
       - name: email_address
