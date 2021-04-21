@@ -2,7 +2,6 @@
 Authentication API
 """
 from datetime import datetime, timedelta
-from email.headerregistry import Address
 from email.message import EmailMessage
 from urllib.parse import urljoin
 import hashlib
@@ -87,8 +86,8 @@ def send_login_email(dest_addr, nick, token: str) -> None:
 
     msg = EmailMessage()
     msg["Subject"] = "OONI Account activation"
-    msg["From"] = Address(src_addr)
-    msg["To"] = (Address(dest_addr),)
+    msg["From"] = src_addr
+    msg["To"] = (dest_addr, )
 
     txt = f"""Welcome to OONI, {nick}.
 
