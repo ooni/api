@@ -28,7 +28,7 @@ Requirements:
 
 Workflow:
   Explorer:
-    - call register_user using an email and receive a temporary login link
+    - call user_register using an email and receive a temporary login link
     - call login_user and receive a long-lived cookie
     - call <TODO> using the previous email to get a new temp. login link
     - call the citizenlab CRUD entry points using the cookie
@@ -113,9 +113,9 @@ def send_login_email(dest_addr, nick, token: str) -> None:
     _send_email(dest_addr, msg)
 
 
-@metrics.timer("register_user")
-@auth_blueprint.route("/api/v1/register_user", methods=["POST"])
-def register_user():
+@metrics.timer("user_register")
+@auth_blueprint.route("/api/v1/user_register", methods=["POST"])
+def user_register():
     """Auth Services: start email-based user registration
     ---
     parameters:
