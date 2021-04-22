@@ -41,8 +41,21 @@ def setup_test_session():
     ooniapi.auth.smtplib.SMTP_SSL = MagicMock()
 
 
+admin_e = "integtest@openobservatory.org"
+user_e = "nick@localhost.local"
+
+
+@pytest.fixture
+def integtest_admin(app):
+    # Access DB directly
+    with app.app_context():
+        ooniapi.auth._set_account_role(admin_e, "admin")
+        yield
+        ooniapi.auth._delete_account_data(admin_e)
+
+
 @pytest.fixture()
-def mk():
+def mocksmtp():
     ooniapi.auth.smtplib.SMTP.reset_mock()
     ooniapi.auth.smtplib.SMTP_SSL.reset_mock()
 
@@ -53,30 +66,36 @@ def postj(client, url, **kw):
     return response
 
 
-def test_login_user_bogus_token(client, mk):
+# # Tests
+
+
+def test_login_user_bogus_token(client, mocksmtp):
     r = client.get(f"/api/v1/user_login?k=BOGUS")
     assert r.status_code == 401
     assert r.json == {"error": "Invalid credentials"}
 
 
-def test_register_user(client, mk):
-    d = dict(nickname="", email_address="nick@localhost.local")
-    r = client.post("/api/v1/register_user", json=d)
+def test_user_register_non_valid(client, mocksmtp):
+    d = dict(nickname="", email_address=user_e)
+    r = client.post("/api/v1/user_register", json=d)
     assert r.status_code == 400
     assert r.json == {"error": "Invalid user name"}
 
-    d = dict(nickname="x", email_address="nick@localhost.local")
-    r = client.post("/api/v1/register_user", json=d)
+    d = dict(nickname="x", email_address=user_e)
+    r = client.post("/api/v1/user_register", json=d)
     assert r.status_code == 400
     assert r.json == {"error": "User name is too short"}
 
     d = dict(nickname="nick", email_address="nick@localhost")
-    r = client.post("/api/v1/register_user", json=d)
+    r = client.post("/api/v1/user_register", json=d)
     assert r.status_code == 400
     assert r.json == {"error": "Invalid email address"}
 
-    d = dict(nickname="nick", email_address="nick@localhost.local")
-    r = client.post("/api/v1/register_user", json=d)
+
+def _register_and_login(client, email_address):
+    ## return cookie header for further use
+    d = dict(nickname="nick", email_address=email_address)
+    r = client.post("/api/v1/user_register", json=d)
     assert r.status_code == 200
     assert r.json == {"msg": "ok"}
 
@@ -99,17 +118,53 @@ def test_register_user(client, mk):
     c = cookies[0]
     assert c.startswith("ooni=")
     assert c.endswith("; Secure; HttpOnly; Path=/; SameSite=Strict")
+    return {"Set-Cookie": c}
 
 
-def test_role_set(client, mk):
-    d = dict(email_address="integtest@openobservatory.org", role="admin")
+def test_user_register(client, mocksmtp):
+    _register_and_login(client, user_e)
+
+
+def test_role_set_not_allowed(client, mocksmtp):
+    # We are not logged in and not allowed to call this
+    d = dict(email_address=admin_e, role="admin")
     r = client.post("/api/v1/set_account_role", json=d)
+    assert r.status_code == 401
+
+    cookh = _register_and_login(client, user_e)
+
+    # We are logged in with role "user" and still not allowed to call this
+    d = dict(email_address=admin_e, role="admin")
+    r = client.post("/api/v1/set_account_role", headers=cookh, json=d)
+    assert r.status_code == 401
+
+    r = client.get("/api/v1/get_account_role/integtest@openobservatory.org")
+    assert r.status_code == 401
+
+
+def test_role_set(client, mocksmtp, integtest_admin):
+    cookh = _register_and_login(client, admin_e)
+
+    # We are logged in with role "admin"
+    d = dict(email_address=admin_e, role="admin")
+    r = client.post("/api/v1/set_account_role", headers=cookh, json=d)
     assert r.status_code == 200
 
     r = client.get("/api/v1/get_account_role/integtest@openobservatory.org")
     assert r.status_code == 200
     assert r.data == b"admin"
 
-    d = dict(email_address="integtest@openobservatory.org", role="user")
+    d = dict(email_address=admin_e, role="user")
     r = client.post("/api/v1/set_account_role", json=d)
     assert r.status_code == 200
+
+
+def test_role_set_with_expunged_token(client, mocksmtp, integtest_admin):
+    cookh = _register_and_login(client, admin_e)
+    # As admin, I expunge my own session token
+    d = dict(email_address=admin_e, role="admin")
+    r = client.post("/api/v1/set_session_expunge", headers=cookh, json=d)
+    assert r.status_code == 200
+
+    r = client.get("/api/v1/get_account_role/" + admin_e)
+    assert r.status_code == 401
