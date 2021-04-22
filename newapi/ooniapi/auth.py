@@ -82,8 +82,9 @@ def role_required(role):
             q = current_app.db_session.execute(query, query_params)
             row = q.fetchone()
             if row:
-                threshold = row[0].timestamp()
-                if dec["iat"] < threshold:
+                threshold = row[0]
+                iat = datetime.utcfromtimestamp(dec["iat"])
+                if iat < threshold:
                     return jerror("Authentication token expired", 401)
             return func(*args, **kwargs)
 
