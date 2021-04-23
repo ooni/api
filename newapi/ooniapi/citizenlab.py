@@ -97,7 +97,7 @@ class URLListManager:
 
         self.origin_repo = origin_repo
         self.ssh_key_path = ssh_key_path
-        self.repo_dir = os.path.join(self.working_dir, "test-lists")
+        self.repo_dir = self.working_dir / "test-lists"
 
         self.repo = self.init_repo()
 
@@ -197,8 +197,8 @@ class URLListManager:
             repo_path = self.repo_dir
 
         test_list = []
-        path = os.path.join(repo_path, "lists", f"{country_code}.csv")
-        with open(path) as tl_file:
+        path = repo_path / "lists" / f"{country_code}.csv"
+        with path.open() as tl_file:
             csv_reader = csv.reader(tl_file)
             for line in csv_reader:
                 test_list.append(line)
