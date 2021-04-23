@@ -73,6 +73,7 @@ CATEGORY_CODES = {
 def jerror(msg, code=400):
     return make_response(jsonify(error=msg), code)
 
+
 class DuplicateURL(Exception):
     pass
 
@@ -117,19 +118,19 @@ class URLListManager:
             GIT_SSH_COMMAND=f"ssh -i {self.ssh_key_path}"
         )
 
-    def get_user_repo_path(self, username):
-        return os.path.join(self.working_dir, "users", username, "test-lists")
+    def get_user_repo_path(self, username) -> Path:
+        return self.working_dir / "users" / username / "test-lists"
 
-    def get_user_statefile_path(self, username):
-        return os.path.join(self.working_dir, "users", username, "state")
+    def get_user_statefile_path(self, username) -> Path:
+        return self.working_dir / "users" / username / "state"
 
-    def get_user_pr_path(self, username):
-        return os.path.join(self.working_dir, "users", username, "pr_id")
+    def get_user_pr_path(self, username) -> Path:
+        return self.working_dir / "users" / username / "pr_id"
 
-    def get_user_branchname(self, username):
+    def get_user_branchname(self, username: str) -> str:
         return f"user-contribution/{username}"
 
-    def get_state(self, username):
+    def get_state(self, username: str):
         """
         Returns the current state of the repo for the given user.
 
@@ -145,37 +146,33 @@ class URLListManager:
             being merged
         """
         try:
-            with open(self.get_user_statefile_path(username), "r") as in_file:
-                return in_file.read()
+            return self.get_user_statefile_path(username).read_text()
         except FileNotFoundError:
             return "CLEAN"
 
-    def set_state(self, username, state):
+    def set_state(self, username, state: str):
         """
         This will record the current state of the pull request for the user to
         the statefile.
         The absence of a statefile is an indication of a clean state.
         """
         assert state in ("IN_PROGRESS", "PR_OPEN", "CLEAN")
-
         logging.debug(f"setting state for {username} to {state}")
         if state == "CLEAN":
-            os.remove(self.get_user_statefile_path(username))
-            os.remove(self.get_user_pr_path(username))
+            self.get_user_statefile_path(username).unlink()
+            self.get_user_pr_path(username).unlink()
             return
 
         with open(self.get_user_statefile_path(username), "w") as out_file:
             out_file.write(state)
 
-    def set_pr_id(self, username, pr_id):
-        with open(self.get_user_pr_path(username), "w") as out_file:
-            out_file.write(pr_id)
+    def set_pr_id(self, username: str, pr_id):
+        self.get_user_pr_path(username).write_text(pr_id)
 
-    def get_pr_id(self, username):
-        with open(self.get_user_pr_path(username)) as in_file:
-            return in_file.read()
+    def get_pr_id(self, username: str):
+        return self.get_user_pr_path(username).read_text()
 
-    def get_user_repo(self, username):
+    def get_user_repo(self, username: str):
         repo_path = self.get_user_repo_path(username)
         if not os.path.exists(repo_path):
             print(f"creating {repo_path}")
@@ -184,9 +181,9 @@ class URLListManager:
             )
         return git.Repo(repo_path)
 
-    def get_user_lock(self, username):
-        lockfile_path = os.path.join(self.working_dir, "users", username, "state.lock")
-        return FileLock(lockfile_path, timeout=5)
+    def get_user_lock(self, username: str):
+        lockfile_f = self.working_dir / "users" / username / "state.lock"
+        return FileLock(lockfile_f, timeout=5)
 
     def get_test_list(self, username, country_code):
         if not len(country_code) == 2 and not country_code == "global":
@@ -249,19 +246,17 @@ class URLListManager:
         repo = self.get_user_repo(username)
         with self.get_user_lock(username):
 
-            filepath = os.path.join(
-                self.get_user_repo_path(username), "lists", f"{cc}.csv"
-            )
+            csv_f = self.get_user_repo_path(username) / "lists" / f"{cc}.csv"
 
             if self.is_duplicate_url(username, cc, new_entry[0]):
                 raise DuplicateURL()
 
-            with open(filepath, "a") as out_file:
+            with csv_f.open("a") as out_file:
                 csv_writer = csv.writer(
                     out_file, quoting=csv.QUOTE_MINIMAL, lineterminator="\n"
                 )
                 csv_writer.writerow(new_entry)
-            repo.index.add([filepath])
+            repo.index.add([csv_f.as_posix()])
             repo.index.commit(comment)
 
             self.set_state(username, "IN_PROGRESS")
@@ -279,9 +274,7 @@ class URLListManager:
         repo = self.get_user_repo(username)
         with self.get_user_lock(username):
 
-            filepath = os.path.join(
-                self.get_user_repo_path(username), "lists", f"{cc}.csv"
-            )
+            csv_f = self.get_user_repo_path(username) / "lists" / f"{cc}.csv"
 
             # If the entry we are changing differs from the previously changed
             # entry we need to check if it's already present in the test list
@@ -291,7 +284,7 @@ class URLListManager:
                 raise DuplicateURL()
 
             out_buffer = io.StringIO()
-            with open(filepath, "r") as in_file:
+            with csv_f.open() as in_file:
                 csv_reader = csv.reader(in_file)
                 csv_writer = csv.writer(
                     out_buffer, quoting=csv.QUOTE_MINIMAL, lineterminator="\n"
@@ -304,13 +297,14 @@ class URLListManager:
                         csv_writer.writerow(new_entry)
                     else:
                         csv_writer.writerow(row)
+
             if not found:
                 raise Exception("Could not find the specified row")
 
-            with open(filepath, "w") as out_file:
+            with csv_f.open("w") as out_file:
                 out_buffer.seek(0)
                 shutil.copyfileobj(out_buffer, out_file)
-            repo.index.add([filepath])
+            repo.index.add([csv_f.as_posix()])
             repo.index.commit(comment)
 
             self.set_state(username, "IN_PROGRESS")
@@ -350,7 +344,7 @@ class URLListManager:
                 force=True,
             )
 
-    def propose_changes(self, username):
+    def propose_changes(self, username: str):
         with self.get_user_lock(username):
             logging.debug("proposing changes")
 
@@ -414,7 +408,7 @@ def get_username():
 
 
 def get_url_list_manager():
-    conf= current_app.config
+    conf = current_app.config
     return URLListManager(
         working_dir=Path(conf["GITHUB_WORKDIR"]),
         ssh_key_path=Path(conf["GITHUB_SSH_KEY_DIR"]),
@@ -530,44 +524,3 @@ def url_submission_edit_url():
         comment=request.json["comment"],
     )
     return {"new_entry": request.json["new_entry"]}
-
-
-def demo(): # FIXME
-
-    ulm = URLListManager(
-        working_dir=os.path.abspath("working_dir"),
-        ssh_key_path=os.path.expanduser("~/.ssh/id_rsa_ooni-bot"),
-        origin_repo="hellais/test-lists",
-        push_repo="ooni-bot/test-lists",
-    )
-
-    # test_lists = tlm.get_test_list("antani")
-    # pprint(test_lists)
-    ulm.add(
-        "antani",
-        "it",
-        ["https://apple.com/", "FILE", "File-sharing", "2017-04-12", "", ""],
-        "add apple.com to italian test list",
-    )
-    ulm.edit(
-        "antani",
-        "it",
-        [
-            "http://btdigg.org/",
-            "FILE",
-            "File-sharing",
-            "2017-04-12",
-            "",
-            "Site reported to be blocked by AGCOM - Italian Autority on Communication",
-        ],
-        [
-            "https://btdigg.org/",
-            "FILE",
-            "File-sharing",
-            "2017-04-12",
-            "",
-            "Site reported to be blocked by AGCOM - Italian Autority on Communication",
-        ],
-        "add https to the website url",
-    )
-    ulm.propose_changes("antani")
