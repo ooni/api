@@ -90,13 +90,13 @@ class ProgressPrinter(git.RemoteProgress):
 
 
 class URLListManager:
-    def __init__(self, working_dir, push_repo, origin_repo, ssh_key_path):
+    def __init__(self, working_dir, github_token, push_repo, origin_repo):
         self.working_dir = working_dir
         self.push_repo = push_repo
         self.github_user = push_repo.split("/")[0]
+        self.github_token = github_token
 
         self.origin_repo = origin_repo
-        self.ssh_key_path = ssh_key_path
         self.repo_dir = self.working_dir / "test-lists"
 
         self.repo = self.init_repo()
@@ -108,15 +108,10 @@ class URLListManager:
             repo = git.Repo.clone_from(
                 f"git@github.com:{self.origin_repo}.git", self.repo_dir, branch="master"
             )
-            repo.create_remote("rworigin", f"git@github.com:{self.push_repo}.git")
+            repo.create_remote("rworigin", f"https://{self.github_user}:{self.github_token}@github.com/{self.push_repo}.git")
         repo = git.Repo(self.repo_dir)
         repo.remotes.origin.pull(progress=ProgressPrinter())
         return repo
-
-    def get_git_env(self):
-        return self.repo.git.custom_environment(
-            GIT_SSH_COMMAND=f"ssh -i {self.ssh_key_path}"
-        )
 
     def get_user_repo_path(self, username) -> Path:
         return self.working_dir / "users" / username / "test-lists"
@@ -313,10 +308,9 @@ class URLListManager:
         head = f"{self.github_user}:{branchname}"
         logging.debug(f"opening a PR for {head}")
 
-        github_token = current_app.config["GITHUB_TOKEN"]
         r = requests.post(
             f"https://api.github.com/repos/{self.origin_repo}/pulls",
-            auth=HTTPBasicAuth(self.github_user, github_token),
+            auth=HTTPBasicAuth(self.github_user, self.github_token),
             json={
                 "head": head,
                 "base": "master",
@@ -328,21 +322,19 @@ class URLListManager:
         return j["url"]
 
     def is_pr_resolved(self, username):
-        github_token = current_app.config["GITHUB_TOKEN"]
         r = requests.post(
             self.get_pr_id(),
-            auth=HTTPBasicAuth(self.github_user, github_token),
+            auth=HTTPBasicAuth(self.github_user, self.github_token),
         )
         j = r.json()
         return j["state"] != "open"
 
     def push_to_repo(self, username):
-        with self.get_git_env():
-            self.repo.remotes.rworigin.push(
-                self.get_user_branchname(username),
-                progress=ProgressPrinter(),
-                force=True,
-            )
+        self.repo.remotes.rworigin.push(
+            self.get_user_branchname(username),
+            progress=ProgressPrinter(),
+            force=True,
+        )
 
     def propose_changes(self, username: str):
         with self.get_user_lock(username):
@@ -411,7 +403,7 @@ def get_url_list_manager():
     conf = current_app.config
     return URLListManager(
         working_dir=Path(conf["GITHUB_WORKDIR"]),
-        ssh_key_path=Path(conf["GITHUB_SSH_KEY_DIR"]),
+        github_token=conf["GITHUB_TOKEN"],
         origin_repo=conf["GITHUB_ORIGIN_REPO"],
         push_repo=conf["GITHUB_PUSH_REPO"],
     )
