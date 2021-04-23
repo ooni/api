@@ -60,14 +60,16 @@ def hash_email_address(email_address: str) -> str:
     return hashlib.blake2b(em, key=key, digest_size=16).hexdigest()
 
 
-def role_required(role):
+def role_required(roles):
+    if isinstance(roles, str):
+        roles = [roles, ]
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             token = request.cookies.get("ooni", "")
             try:
                 dec = decode_jwt(token, audience="user_auth")
-                if dec["role"] != role:
+                if dec["role"] not in roles:
                     return jerror("Role not authorized", 401)
             except Exception:
                 return jerror("Authentication required", 401)
@@ -86,6 +88,8 @@ def role_required(role):
                 iat = datetime.utcfromtimestamp(dec["iat"])
                 if iat < threshold:
                     return jerror("Authentication token expired", 401)
+            # attach nickname to request
+            request._user_nickname = dec["nick"]
             return func(*args, **kwargs)
 
         return wrapper
