@@ -3,7 +3,7 @@ Citizenlab CRUD API
 """
 
 from datetime import datetime
-from glob import glob
+from pathlib import Path
 from urllib.parse import urlparse
 import csv
 import io
@@ -12,14 +12,17 @@ import os
 import re
 import shutil
 
-import git
-import requests
-from filelock import FileLock
-from flask import Flask
 from requests.auth import HTTPBasicAuth
+from filelock import FileLock  # debdeps: python3-filelock
+from flask import Blueprint, current_app, request, make_response, jsonify
 from werkzeug.exceptions import HTTPException
+import git  # debdeps: python3-git
+import requests
 
-logging.basicConfig(level=logging.DEBUG)
+from ooniapi.auth import role_required
+
+cz_blueprint = Blueprint("citizenlab_api", "citizenlab")
+
 
 VALID_URL = regex = re.compile(
     r"^(?:http)s?://"  # http:// or https://
@@ -66,8 +69,13 @@ CATEGORY_CODES = {
     "MISC": "Miscelaneous content",
 }
 
+
+def jerror(msg, code=400):
+    return make_response(jsonify(error=msg), code)
+
 class DuplicateURL(Exception):
     pass
+
 
 class ProgressPrinter(git.RemoteProgress):
     def update(self, op_code, cur_count, max_count=None, message=""):
@@ -81,13 +89,12 @@ class ProgressPrinter(git.RemoteProgress):
 
 
 class URLListManager:
-    def __init__(self, working_dir, push_repo, master_repo, github_token, ssh_key_path):
+    def __init__(self, working_dir, push_repo, origin_repo, ssh_key_path):
         self.working_dir = working_dir
         self.push_repo = push_repo
         self.github_user = push_repo.split("/")[0]
-        self.github_token = github_token
 
-        self.master_repo = master_repo
+        self.origin_repo = origin_repo
         self.ssh_key_path = ssh_key_path
         self.repo_dir = os.path.join(self.working_dir, "test-lists")
 
@@ -98,7 +105,7 @@ class URLListManager:
         if not os.path.exists(self.repo_dir):
             logging.debug("cloning repo")
             repo = git.Repo.clone_from(
-                f"git@github.com:{self.master_repo}.git", self.repo_dir, branch="master"
+                f"git@github.com:{self.origin_repo}.git", self.repo_dir, branch="master"
             )
             repo.create_remote("rworigin", f"git@github.com:{self.push_repo}.git")
         repo = git.Repo(self.repo_dir)
@@ -128,11 +135,14 @@ class URLListManager:
 
         The possible states are:
         - CLEAN:
-            when we are in sync with the current tip of master and no changes have been made
+            when we are in sync with the current tip of master and no changes
+            have been made
         - IN_PROGRESS:
-            when there are some changes in the working tree of the user, but they haven't yet pushed them
+            when there are some changes in the working tree of the user, but
+            they haven't yet pushed them
         - PR_OPEN:
-            when the PR of the user is open on github and it's waiting for being merged
+            when the PR of the user is open on github and it's waiting for
+            being merged
         """
         try:
             with open(self.get_user_statefile_path(username), "r") as in_file:
@@ -142,8 +152,8 @@ class URLListManager:
 
     def set_state(self, username, state):
         """
-        This will record the current state of the pull request for the user to the statefile.
-
+        This will record the current state of the pull request for the user to
+        the statefile.
         The absence of a statefile is an indication of a clean state.
         """
         assert state in ("IN_PROGRESS", "PR_OPEN", "CLEAN")
@@ -183,7 +193,7 @@ class URLListManager:
             raise Exception("Bad country_code")
 
         self.sync_state(username)
-        self.pull_master_repo()
+        self.pull_origin_repo()
 
         repo_path = self.get_user_repo_path(username)
         if not os.path.exists(repo_path):
@@ -208,7 +218,7 @@ class URLListManager:
                 url_set.add(url)
         return new_url in url_set
 
-    def pull_master_repo(self):
+    def pull_origin_repo(self):
         self.repo.remotes.origin.pull(progress=ProgressPrinter())
 
     def sync_state(self, username):
@@ -219,17 +229,16 @@ class URLListManager:
             return
         if state == "IN_PROGRESS":
             return
-        if state == "PR_OPEN":
-            if self.is_pr_resolved(username):
-                shutil.rmtree(self.get_user_repo_path(username))
-                self.repo.git.worktree("prune")
-                self.repo.delete_head(self.get_user_branchname(username), force=True)
+        if self.is_pr_resolved(username):
+            shutil.rmtree(self.get_user_repo_path(username))
+            self.repo.git.worktree("prune")
+            self.repo.delete_head(self.get_user_branchname(username), force=True)
 
-                self.set_state(username, "CLEAN")
+            self.set_state(username, "CLEAN")
 
     def add(self, username, cc, new_entry, comment):
         self.sync_state(username)
-        self.pull_master_repo()
+        self.pull_origin_repo()
 
         logging.debug("adding new entry")
 
@@ -259,7 +268,7 @@ class URLListManager:
 
     def edit(self, username, cc, old_entry, new_entry, comment):
         self.sync_state(username)
-        self.pull_master_repo()
+        self.pull_origin_repo()
 
         logging.debug("editing existing entry")
 
@@ -310,9 +319,10 @@ class URLListManager:
         head = f"{self.github_user}:{branchname}"
         logging.debug(f"opening a PR for {head}")
 
+        github_token = current_app.config["GITHUB_TOKEN"]
         r = requests.post(
-            f"https://api.github.com/repos/{self.master_repo}/pulls",
-            auth=HTTPBasicAuth(self.github_user, self.github_token),
+            f"https://api.github.com/repos/{self.origin_repo}/pulls",
+            auth=HTTPBasicAuth(self.github_user, github_token),
             json={
                 "head": head,
                 "base": "master",
@@ -324,9 +334,10 @@ class URLListManager:
         return j["url"]
 
     def is_pr_resolved(self, username):
+        github_token = current_app.config["GITHUB_TOKEN"]
         r = requests.post(
             self.get_pr_id(),
-            auth=HTTPBasicAuth(self.github_user, self.github_token),
+            auth=HTTPBasicAuth(self.github_user, github_token),
         )
         j = r.json()
         return j["state"] != "open"
@@ -394,38 +405,55 @@ def validate_entry(entry):
             != date_str
         ):
             raise BadDate()
-    except:
+    except Exception:
         raise BadDate()
 
 
+def get_username():
+    return request._user_nickname
+
+
 def get_url_list_manager():
+    conf= current_app.config
     return URLListManager(
-        working_dir=os.path.abspath("working_dir"),
-        ssh_key_path=os.path.expanduser("~/.ssh/id_rsa_ooni-bot"),
-        master_repo="hellais/test-lists",
-        push_repo="ooni-bot/test-lists",
-        github_token=github_token,
+        working_dir=Path(conf["GITHUB_WORKDIR"]),
+        ssh_key_path=Path(conf["GITHUB_SSH_KEY_DIR"]),
+        origin_repo=conf["GITHUB_ORIGIN_REPO"],
+        push_repo=conf["GITHUB_PUSH_REPO"],
     )
 
 
-def get_username():
-    return "antani"
-
-
-app = Flask(__name__)
-
-
-@app.route("/api/v1/url-submission/test-list/<country_code>", methods=["GET"])
+@cz_blueprint.route("/api/v1/url-submission/test-list/<country_code>", methods=["GET"])
+@role_required(["admin", "user"])
 def get_test_list(country_code):
+    """Fetch citizenlab URL list
+    ---
+    parameters:
+      - in: path
+        name: country_code
+        type: string
+        required: true
+        description: 2-letter country code or "global"
+    responses:
+      200:
+        description: URL list
+        schema:
+          type: object
+          properties:
+            new_entry:
+              type: array
+    """
     username = get_username()
 
     ulm = get_url_list_manager()
     return ulm.get_test_list(username, country_code)
 
 
-@app.route("/api/v1/url-submission/add-url", methods=["POST"])
+@cz_blueprint.route("/api/v1/url-submission/add-url", methods=["POST"])
+@role_required(["admin", "user"])
 def url_submission_add_url():
-    """
+    """Submit new URL
+    ---
     parameters:
       - in: body
         name: add new URL
@@ -440,7 +468,7 @@ def url_submission_add_url():
             new_entry:
               type: array
     responses:
-      '200':
+      200:
         description: New URL confirmation
         schema:
           type: object
@@ -461,9 +489,11 @@ def url_submission_add_url():
     return {"new_entry": request.json["new_entry"]}
 
 
-@app.route("/api/v1/url-submission/edit-url", methods=["POST"])
+@cz_blueprint.route("/api/v1/url-submission/edit-url", methods=["POST"])
+@role_required(["admin", "user"])
 def url_submission_edit_url():
-    """
+    """Edit citizenlab URL
+    ---
     parameters:
       - in: body
         name: add new URL
@@ -502,16 +532,13 @@ def url_submission_edit_url():
     return {"new_entry": request.json["new_entry"]}
 
 
-def main():
-    with open("GITHUB_TOKEN") as in_file:
-        github_token = in_file.read().strip()
+def demo(): # FIXME
 
     ulm = URLListManager(
         working_dir=os.path.abspath("working_dir"),
         ssh_key_path=os.path.expanduser("~/.ssh/id_rsa_ooni-bot"),
-        master_repo="hellais/test-lists",
+        origin_repo="hellais/test-lists",
         push_repo="ooni-bot/test-lists",
-        github_token=github_token,
     )
 
     # test_lists = tlm.get_test_list("antani")
@@ -544,7 +571,3 @@ def main():
         "add https to the website url",
     )
     ulm.propose_changes("antani")
-
-
-if __name__ == "__main__":
-    main()
