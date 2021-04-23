@@ -7,12 +7,11 @@ Lint using:
     black -t py37 -l 100 --fast ooniapi/tests/integ/test_probe_services.py
 
 Test using:
-    pytest-3 -s --show-capture=no ooniapi/tests/integ/test_probe_services.py
+    pytest-3 -s --show-capture=no ooniapi/tests/integ/test_integration_auth.py
 """
 
 import os
 from unittest.mock import MagicMock, Mock
-
 
 import pytest
 
@@ -30,7 +29,6 @@ def setup_test_session():
     os.environ["CONF"] = "tests/integ/api.conf"
 
     # mock smtplib
-
     m = Mock(name="MockSMTPInstance")
     s = Mock(name="SMTP session")
     x = Mock(name="mock enter", return_value=s)
