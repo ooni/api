@@ -62,13 +62,17 @@ def validate_conf(app, conffile):
         "COLLECTORS",
         "DATABASE_STATEMENT_TIMEOUT",
         "DATABASE_URI_RO",
+        "GITHUB_ORIGIN_REPO",
+        "GITHUB_PUSH_REPO",
+        "GITHUB_TOKEN",
+        "GITHUB_WORKDIR",
         "JWT_ENCRYPTION_KEY",
         "MAIL_PASSWORD",
         "MAIL_PORT",
         "MAIL_SERVER",
+        "MAIL_SOURCE_ADDRESS",
         "MAIL_USERNAME",
         "MAIL_USE_SSL",
-        "MAIL_SOURCE_ADDRESS",
         "MSMT_SPOOL_DIR",
         "S3_ACCESS_KEY_ID",
         "S3_ENDPOINT_URL",
@@ -89,6 +93,7 @@ def init_app(app, testmode=False):
     log = logging.getLogger("ooni-api")
     app.config.from_object("ooniapi.config")
     conffile = os.getenv("CONF", "/etc/ooni/api.conf")
+    # conffile = os.getenv("CONF", "/root/tests/integ/api.conf")
     if enable_journal:
         log.addHandler(JournalHandler(SYSLOG_IDENTIFIER="ooni-api"))
     log.setLevel(logging.DEBUG)
