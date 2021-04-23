@@ -342,6 +342,7 @@ def _get_account_role(account_id: str) -> Optional[str]:
     r = q.fetchone()
     if r:
         return r[0]
+    return None
 
 
 @auth_blueprint.route("/api/v1/get_account_role/<email_address>")
