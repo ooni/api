@@ -35,8 +35,7 @@ def test_list_global(client, usersession):
 #def url_list_manager(tmpdir, mocker):
 #    ulm = URLListManager(
 #        working_dir=tmpdir.strpath,
-#        ssh_key_path="",
-#        master_repo="hellais/test-lists",
+#        origin_repo="hellais/test-lists",
 #        push_repo="ooni-bot/test-lists",
 #        github_token=None,
 #    )
@@ -108,3 +107,4 @@ def test_list_global(client, usersession):
 #        "add https to the website url",
 #    )
 #    assert url_list_manager.get_state(username) == "IN_PROGRESS"
+#
