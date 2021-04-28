@@ -501,8 +501,9 @@ def url_submission_add_url():
 @cz_blueprint.route("/api/v1/url-submission/update-url", methods=["POST"])
 @role_required(["admin", "user"])
 def url_submission_update_url():
-    """Update a citizenlab URL entry. The current value needs to be sent back
-    as "old_entry" as a check against race conditions
+    """Update a citizenlab URL entry.
+    The current value needs to be sent back as "old_entry" as a check
+    against race conditions
     ---
     parameters:
       - in: body
@@ -520,12 +521,12 @@ def url_submission_update_url():
             old_entry:
               type: array
     responses:
-      '200':
+      200:
         description: New URL confirmation
         schema:
           type: object
           properties:
-            new_entry:
+            updated_entry:
               type: array
     """
     global log
@@ -553,6 +554,14 @@ def url_submission_update_url():
 def get_workflow_state():
     """Get workflow state
     ---
+    responses:
+      200:
+        description: New URL confirmation
+        schema:
+          type: object
+          properties:
+            new_entry:
+              type: array
     """
     global log
     log = current_app.logger
@@ -566,8 +575,12 @@ def get_workflow_state():
 @cz_blueprint.route("/api/v1/url-submission/submit", methods=["POST"])
 @role_required(["admin", "user"])
 def post_propose_changes():
-    """Propose changes
+    """Propose changes: open a Pull Request on GitHub
     ---
+    responses:
+      200:
+        description: Pull request number
+        type: string
     """
     global log
     log = current_app.logger

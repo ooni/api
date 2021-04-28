@@ -24,7 +24,7 @@ auth_blueprint = Blueprint("auth_api", "auth")
 Browser authentication - see probe_services.py for probe authentication
 Requirements:
   - Never store users email address nor IP addresses nor passwords
-  - Verify email to limit spambots. Do not use capchas
+  - Verify email to limit spambots. Do not use CAPCHAs
   - Support multiple sessions / devices, ability to register/login again
 
 Workflow:
