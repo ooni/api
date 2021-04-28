@@ -52,10 +52,14 @@ def integtest_admin(app):
         ooniapi.auth._delete_account_data(admin_e)
 
 
-@pytest.fixture()
-def mocksmtp():
+def reset_smtp_mock():
     ooniapi.auth.smtplib.SMTP.reset_mock()
     ooniapi.auth.smtplib.SMTP_SSL.reset_mock()
+
+
+@pytest.fixture()
+def mocksmtp():
+    reset_smtp_mock()
 
 
 def postj(client, url, **kw):
@@ -65,6 +69,8 @@ def postj(client, url, **kw):
 
 
 # # Tests
+
+# TODO remove cookh
 
 
 def test_login_user_bogus_token(client, mocksmtp):
