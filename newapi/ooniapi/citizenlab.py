@@ -5,9 +5,10 @@ Citizenlab CRUD API
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
+from hashlib import sha224
+from typing import List
 import csv
 import io
-import logging
 import os
 import re
 import shutil
@@ -20,6 +21,10 @@ import git  # debdeps: python3-git
 import requests
 
 from ooniapi.auth import role_required
+
+# TODO: add per-user locking
+
+log = None
 
 cz_blueprint = Blueprint("citizenlab_api", "citizenlab")
 
@@ -89,6 +94,11 @@ class ProgressPrinter(git.RemoteProgress):
         )
 
 
+def safe(username: str) -> str:
+    """Convert username to a filesystem-safe string"""
+    return sha224("aoeu".encode()).hexdigest()
+
+
 class URLListManager:
     def __init__(self, working_dir, github_token, push_repo, origin_repo):
         self.working_dir = working_dir
@@ -102,27 +112,28 @@ class URLListManager:
         self.repo = self.init_repo()
 
     def init_repo(self):
-        logging.debug("initializing repo")
+        log.debug("initializing repo")
         if not os.path.exists(self.repo_dir):
-            logging.debug("cloning repo")
-            repo = git.Repo.clone_from(
-                f"git@github.com:{self.origin_repo}.git", self.repo_dir, branch="master"
-            )
-            repo.create_remote("rworigin", f"https://{self.github_user}:{self.github_token}@github.com/{self.push_repo}.git")
+            log.debug("cloning repo")
+            url = f"https://github.com/{self.origin_repo}.git"
+            repo = git.Repo.clone_from(url, self.repo_dir, branch="master")
+            url = f"https://{self.github_user}:{self.github_token}@github.com/{self.push_repo}.git"
+            repo.create_remote("rworigin", url)
         repo = git.Repo(self.repo_dir)
         repo.remotes.origin.pull(progress=ProgressPrinter())
         return repo
 
     def get_user_repo_path(self, username) -> Path:
-        return self.working_dir / "users" / username / "test-lists"
+        return self.working_dir / "users" / safe(username) / "test-lists"
 
     def get_user_statefile_path(self, username) -> Path:
-        return self.working_dir / "users" / username / "state"
+        return self.working_dir / "users" / safe(username) / "state"
 
     def get_user_pr_path(self, username) -> Path:
-        return self.working_dir / "users" / username / "pr_id"
+        return self.working_dir / "users" / safe(username) / "pr_id"
 
     def get_user_branchname(self, username: str) -> str:
+        # FIXME: username is not trusted
         return f"user-contribution/{username}"
 
     def get_state(self, username: str):
@@ -152,7 +163,7 @@ class URLListManager:
         The absence of a statefile is an indication of a clean state.
         """
         assert state in ("IN_PROGRESS", "PR_OPEN", "CLEAN")
-        logging.debug(f"setting state for {username} to {state}")
+        log.debug(f"setting state for {username} to {state}")
         if state == "CLEAN":
             self.get_user_statefile_path(username).unlink()
             self.get_user_pr_path(username).unlink()
@@ -177,12 +188,13 @@ class URLListManager:
         return git.Repo(repo_path)
 
     def get_user_lock(self, username: str):
-        lockfile_f = self.working_dir / "users" / username / "state.lock"
+        lockfile_f = self.working_dir / "users" / safe(username) / "state.lock"
         return FileLock(lockfile_f, timeout=5)
 
     def get_test_list(self, username, country_code):
-        if not len(country_code) == 2 and not country_code == "global":
-            raise Exception("Bad country_code")
+        country_code = country_code.lower()
+        if len(country_code) != 2 and country_code != "global":
+            raise Exception("Invalid country code")
 
         self.sync_state(username)
         self.pull_origin_repo()
@@ -193,6 +205,7 @@ class URLListManager:
 
         test_list = []
         path = repo_path / "lists" / f"{country_code}.csv"
+        log.debug(f"Reading {path}")
         with path.open() as tl_file:
             csv_reader = csv.reader(tl_file)
             for line in csv_reader:
@@ -231,52 +244,56 @@ class URLListManager:
     def add(self, username, cc, new_entry, comment):
         self.sync_state(username)
         self.pull_origin_repo()
-
-        logging.debug("adding new entry")
-
+        log.debug("adding new entry")
         state = self.get_state(username)
         if state in ("PR_OPEN"):
             raise Exception("You cannot edit files while changes are pending")
 
         repo = self.get_user_repo(username)
         with self.get_user_lock(username):
-
             csv_f = self.get_user_repo_path(username) / "lists" / f"{cc}.csv"
 
             if self.is_duplicate_url(username, cc, new_entry[0]):
                 raise DuplicateURL()
 
+            log.debug(f"Writing {csv_f}")
             with csv_f.open("a") as out_file:
                 csv_writer = csv.writer(
                     out_file, quoting=csv.QUOTE_MINIMAL, lineterminator="\n"
                 )
                 csv_writer.writerow(new_entry)
+
+            log.debug(f"Writtten {csv_f}")
             repo.index.add([csv_f.as_posix()])
             repo.index.commit(comment)
 
             self.set_state(username, "IN_PROGRESS")
 
-    def edit(self, username, cc, old_entry, new_entry, comment):
+    def update(self, username, cc, old_entry, new_entry, comment):
+        log.debug("updating existing entry")
+        cc = cc.lower()
+        if len(cc) != 2:
+            raise Exception("Invalid country code")
+
         self.sync_state(username)
         self.pull_origin_repo()
-
-        logging.debug("editing existing entry")
-
         state = self.get_state(username)
         if state in ("PR_OPEN"):
-            raise Exception("You cannot edit the files while changes are pending")
+            raise Exception("Your changes are being reviewed. Please wait.")
+
+        if old_entry == new_entry:
+            raise Exception("No change is being made.")
 
         repo = self.get_user_repo(username)
         with self.get_user_lock(username):
 
             csv_f = self.get_user_repo_path(username) / "lists" / f"{cc}.csv"
 
-            # If the entry we are changing differs from the previously changed
-            # entry we need to check if it's already present in the test list
-            if new_entry[0] != old_entry[0] and self.is_duplicate_url(
-                username, cc, new_entry[0]
-            ):
-                raise DuplicateURL()
+            new_url = new_entry[0]
+            if new_url != old_entry[0]:
+                # If the URL is being changed check for collisions
+                if self.is_duplicate_url(username, cc, new_url):
+                    raise DuplicateURL()
 
             out_buffer = io.StringIO()
             with csv_f.open() as in_file:
@@ -294,7 +311,8 @@ class URLListManager:
                         csv_writer.writerow(row)
 
             if not found:
-                raise Exception("Could not find the specified row")
+                m = "Unable to update. The URL list has changed in the meantime."
+                raise Exception(m)
 
             with csv_f.open("w") as out_file:
                 out_buffer.seek(0)
@@ -306,11 +324,11 @@ class URLListManager:
 
     def open_pr(self, branchname):
         head = f"{self.github_user}:{branchname}"
-        logging.debug(f"opening a PR for {head}")
-
+        log.debug(f"opening a PR for {head}")
+        auth = HTTPBasicAuth(self.github_user, self.github_token)
         r = requests.post(
             f"https://api.github.com/repos/{self.origin_repo}/pulls",
-            auth=HTTPBasicAuth(self.github_user, self.github_token),
+            auth=auth,
             json={
                 "head": head,
                 "base": "master",
@@ -318,53 +336,52 @@ class URLListManager:
             },
         )
         j = r.json()
-        logging.debug(j)
+        #log.debug(j)
         return j["url"]
 
     def is_pr_resolved(self, username):
-        r = requests.post(
-            self.get_pr_id(),
-            auth=HTTPBasicAuth(self.github_user, self.github_token),
-        )
+        pr_id = (self.get_pr_id(username),)
+        auth = HTTPBasicAuth(self.github_user, self.github_token)
+        r = requests.post(pr_id, auth=auth)
         j = r.json()
         return j["state"] != "open"
 
     def push_to_repo(self, username):
+        log.debug("pushing branch to GitHub")
         self.repo.remotes.rworigin.push(
             self.get_user_branchname(username),
             progress=ProgressPrinter(),
             force=True,
         )
 
-    def propose_changes(self, username: str):
+    def propose_changes(self, username: str) -> str:
         with self.get_user_lock(username):
-            logging.debug("proposing changes")
-
+            log.debug("proposing changes")
+            self.set_state(username, "PR_OPEN")
             self.push_to_repo(username)
-
             pr_id = self.open_pr(self.get_user_branchname(username))
             self.set_pr_id(username, pr_id)
-            self.set_state(username, "PR_OPEN")
+            return pr_id
 
 
 class BadURL(HTTPException):
     code = 400
-    description = "Bad URL"
+    description = "Invalid URL"
 
 
 class BadCategoryCode(HTTPException):
     code = 400
-    description = "Bad category code"
+    description = "Invalid category code"
 
 
 class BadCategoryDescription(HTTPException):
     code = 400
-    description = "Bad category description"
+    description = "Invalid category description"
 
 
 class BadDate(HTTPException):
     code = 400
-    description = "Bad date"
+    description = "Invalid date"
 
 
 def check_url(url):
@@ -378,7 +395,7 @@ def check_url(url):
         raise BadURL()
 
 
-def validate_entry(entry):
+def validate_entry(entry: List[str]) -> None:
     url, category_code, category_desc, date_str, user, notes = entry
     check_url(url)
     if category_code not in CATEGORY_CODES:
@@ -386,10 +403,8 @@ def validate_entry(entry):
     if category_desc != CATEGORY_CODES[category_code]:
         raise BadCategoryDescription()
     try:
-        if (
-            datetime.datetime.strptime(date_str, "%Y-%m-%d").date().isoformat()
-            != date_str
-        ):
+        d = datetime.strptime(date_str, "%Y-%m-%d").date().isoformat()
+        if d != date_str:
             raise BadDate()
     except Exception:
         raise BadDate()
@@ -429,16 +444,18 @@ def get_test_list(country_code):
             new_entry:
               type: array
     """
+    global log
+    log = current_app.logger
     username = get_username()
-
     ulm = get_url_list_manager()
-    return ulm.get_test_list(username, country_code)
+    tl = ulm.get_test_list(username, country_code)
+    return make_response(jsonify(tl))
 
 
 @cz_blueprint.route("/api/v1/url-submission/add-url", methods=["POST"])
 @role_required(["admin", "user"])
 def url_submission_add_url():
-    """Submit new URL
+    """Submit a new citizenlab URL entry
     ---
     parameters:
       - in: body
@@ -462,23 +479,30 @@ def url_submission_add_url():
             new_entry:
               type: array
     """
-    username = get_username()
+    global log
+    log = current_app.logger
+    try:
+        username = get_username()
+        ulm = get_url_list_manager()
+        validate_entry(request.json["new_entry"])
+        ulm.add(
+            username=username,
+            cc=request.json["country_code"],
+            new_entry=request.json["new_entry"],
+            comment=request.json["comment"],
+        )
+        d = {"new_entry": request.json["new_entry"]}
+        return make_response(jsonify(d))
+    except Exception as e:
+        log.info(f"URL submission add error {e}", exc_info=1)
+        return jerror(str(e))
 
-    ulm = get_url_list_manager()
-    validate_entry(request.json["new_entry"])
-    ulm.add(
-        username=username,
-        cc=request.json["country_code"],
-        new_entry=request.json["new_entry"],
-        comment=request.json["comment"],
-    )
-    return {"new_entry": request.json["new_entry"]}
 
-
-@cz_blueprint.route("/api/v1/url-submission/edit-url", methods=["POST"])
+@cz_blueprint.route("/api/v1/url-submission/update-url", methods=["POST"])
 @role_required(["admin", "user"])
-def url_submission_edit_url():
-    """Edit citizenlab URL
+def url_submission_update_url():
+    """Update a citizenlab URL entry. The current value needs to be sent back
+    as "old_entry" as a check against race conditions
     ---
     parameters:
       - in: body
@@ -504,15 +528,51 @@ def url_submission_edit_url():
             new_entry:
               type: array
     """
+    global log
+    log = current_app.logger
     username = get_username()
 
     ulm = get_url_list_manager()
     validate_entry(request.json["new_entry"])
-    ulm.edit(
-        username=username,
-        cc=request.json["country_code"],
-        old_entry=request.json["old_entry"],
-        new_entry=request.json["new_entry"],
-        comment=request.json["comment"],
-    )
-    return {"new_entry": request.json["new_entry"]}
+    try:
+        ulm.update(
+            username=username,
+            cc=request.json["country_code"],
+            old_entry=request.json["old_entry"],
+            new_entry=request.json["new_entry"],
+            comment=request.json["comment"],
+        )
+        return jsonify({"updated_entry": request.json["new_entry"]})
+    except Exception as e:
+        log.info(f"URL submission update error {e}", exc_info=1)
+        return jerror(str(e))
+
+
+@cz_blueprint.route("/api/v1/url-submission/state", methods=["GET"])
+@role_required(["admin", "user"])
+def get_workflow_state():
+    """Get workflow state
+    ---
+    """
+    global log
+    log = current_app.logger
+    username = get_username()
+    log.debug("get citizenlab workflow state")
+    ulm = get_url_list_manager()
+    state = ulm.get_state(username)
+    return state
+
+
+@cz_blueprint.route("/api/v1/url-submission/submit", methods=["POST"])
+@role_required(["admin", "user"])
+def post_propose_changes():
+    """Propose changes
+    ---
+    """
+    global log
+    log = current_app.logger
+    log.info("submitting citizenlab changes")
+    username = get_username()
+    ulm = get_url_list_manager()
+    pr_id = ulm.propose_changes(username)
+    return pr_id
