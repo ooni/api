@@ -52,6 +52,18 @@ def integtest_admin(app):
         ooniapi.auth._delete_account_data(admin_e)
 
 
+@pytest.fixture
+def adminsession(client, app):
+    # Access DB directly
+    # Mock out SMTP, register a user and log in
+    with app.app_context():
+        ooniapi.auth._set_account_role(admin_e, "admin")
+        _register_and_login(client, admin_e)
+        reset_smtp_mock()
+        yield
+        ooniapi.auth._delete_account_data(admin_e)
+        reset_smtp_mock()
+
 def reset_smtp_mock():
     ooniapi.auth.smtplib.SMTP.reset_mock()
     ooniapi.auth.smtplib.SMTP_SSL.reset_mock()

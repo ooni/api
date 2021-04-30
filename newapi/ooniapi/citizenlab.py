@@ -40,6 +40,7 @@ VALID_URL = regex = re.compile(
 
 BAD_CHARS = ["\r", "\n", "\t", "\\"]
 
+# TODO: move out
 CATEGORY_CODES = {
     "ALDR": "Alcohol & Drugs",
     "REL": "Religion",
@@ -336,7 +337,7 @@ class URLListManager:
             },
         )
         j = r.json()
-        #log.debug(j)
+        # log.debug(j)
         return j["url"]
 
     def is_pr_resolved(self, username):
@@ -589,3 +590,221 @@ def post_propose_changes():
     ulm = get_url_list_manager()
     pr_id = ulm.propose_changes(username)
     return pr_id
+
+
+# # Prioritization management # #
+
+
+def create_url_priorities_table() -> None:
+    log = current_app.logger
+    sql = "SELECT to_regclass('url_priorities')"
+    q = current_app.db_session.execute(sql)
+    if q.fetchone()[0] is not None:
+        return  # table already present
+
+    log.info("Creating table url_priorities")
+    sql = """
+CREATE TABLE public.url_priorities (
+    category_code text,
+    cc text,
+    domain text,
+    url text,
+    priority smallint NOT NULL,
+    UNIQUE (category_code, cc, domain, url)
+);
+COMMENT ON COLUMN public.url_priorities.domain IS 'FQDN or ipaddr without http and port number';
+COMMENT ON COLUMN public.url_priorities.category_code IS 'Category from Citizen Lab';
+GRANT SELECT ON TABLE public.url_priorities TO readonly;
+GRANT SELECT ON TABLE public.url_priorities TO shovel;
+GRANT SELECT ON TABLE public.url_priorities TO amsapi;
+"""
+    current_app.db_session.execute(sql)
+
+    log.info("Populating table url_priorities")
+    sql = """INSERT INTO url_priorities
+        (category_code, cc, domain, url, priority)
+        VALUES(:category_code, '*', '*', '*', :priority)"""
+    category_priorities = {
+        "NEWS": 100,
+        "POLR": 100,
+        "HUMR": 100,
+        "LGBT": 100,
+        "ANON": 100,
+        "GRP": 80,
+        "COMT": 80,
+        "MMED": 80,
+        "SRCH": 80,
+        "PUBH": 80,
+        "REL": 60,
+        "XED": 60,
+        "HOST": 60,
+        "ENV": 60,
+        "FILE": 40,
+        "CULTR": 40,
+        "IGO": 40,
+        "GOVT": 40,
+        "DATE": 30,
+        "HATE": 30,
+        "MILX": 30,
+        "PROV": 30,
+        "PORN": 30,
+        "GMB": 30,
+        "ALDR": 30,
+        "GAME": 20,
+        "MISC": 20,
+        "HACK": 20,
+        "ECON": 20,
+        "COMM": 20,
+        "CTRL": 20,
+    }
+    for cat, prio in category_priorities.items():
+        d = dict(category_code=cat, priority=prio)
+        current_app.db_session.execute(sql, d)
+    current_app.db_session.commit()
+
+
+@cz_blueprint.route("/api/_/url-priorities/list", methods=["GET"])
+@role_required(["admin"])
+def list_url_priorities():
+    """List URL priority rules
+    ---
+    responses:
+      200:
+        type: string
+    """
+    global log
+    log = current_app.logger
+    log.debug("listing URL prio rules")
+    query = """SELECT category_code, cc, domain, url, priority
+    FROM url_priorities"""
+    q = current_app.db_session.execute(query)
+    row = [dict(r) for r in q]
+    return make_response(jsonify(rules=row))
+
+
+@cz_blueprint.route("/api/_/url-priorities/update", methods=["POST"])
+@role_required(["admin"])
+def post_update_url_priority():
+    """Add/update/delete an URL priority rule
+    ---
+    parameters:
+      - in: body
+        name: add new URL
+        required: true
+        schema:
+          type: object
+          properties:
+            old_entry:
+              type: object
+              properties:
+                category_code:
+                  type: string
+                cc:
+                  type: string
+                domain:
+                  type: string
+                url:
+                  type: string
+                priority:
+                  type: integer
+            new_entry:
+              type: object
+              properties:
+                category_code:
+                  type: string
+                cc:
+                  type: string
+                domain:
+                  type: string
+                url:
+                  type: string
+                priority:
+                  type: integer
+    responses:
+      200:
+        type: string
+    """
+    log = current_app.logger
+    log.info("updating URL priority rule")
+    old = request.json.get("old_entry", None)
+    new = request.json.get("new_entry", None)
+    if not old and not new:
+        return jerror("Pointless update", 400)
+
+    for k in ["category_code", "cc", "domain", "url", "priority"]:
+        if old and k not in old:
+            old[k] = "*"
+        if new and k not in new:
+            new[k] = "*"
+
+    assert old or new
+    if old:  # delete an existing rule
+        query = """DELETE FROM url_priorities
+        WHERE category_code = :category_code
+        AND cc = :cc
+        AND domain = :domain
+        AND url = :url
+        AND priority = :priority
+        """
+        q = current_app.db_session.execute(query, old).rowcount
+        if q < 1:
+            return jerror("Old rule not found", 400)
+
+    if new:  # add new rule
+        query = """INSERT INTO url_priorities
+            (category_code, cc, domain, url, priority)
+            VALUES(:category_code, :cc, :domain, :url, :priority)
+        """
+        try:
+            q = current_app.db_session.execute(query, new).rowcount
+        except Exception as e:
+            log.info(str(e))
+            current_app.db_session.rollback()
+            return jerror("Duplicate rule", 400)
+
+    current_app.db_session.commit()
+    return make_response(jsonify(q))
+
+
+def match_prio_rule(cz, pr: dict) -> bool:
+    for k in ["category_code", "cc", "domain", "url"]:
+        if pr[k] not in ("*", cz[k]):
+            return False
+
+    return True
+
+
+def compute_url_priorities():
+    log = current_app.logger
+    sql = "SELECT category_code, cc, domain, url, priority FROM citizenlab"
+    q = current_app.db_session.execute(sql)
+    citizenlab = [dict(r) for r in q]
+    sql = "SELECT category_code, cc, domain, url, priority FROM url_priorities"
+    q = current_app.db_session.execute(sql)
+    prio_rules = [dict(r) for r in q]
+    assert prio_rules
+    match_attempt_cnt = 0
+    match_cnt = 0
+    for cz in citizenlab:
+        cz["priority"] = 0
+        for pr in prio_rules:
+            match_attempt_cnt += 1
+            if match_prio_rule(cz, pr):
+                match_cnt += 1
+                cz["priority"] += pr["priority"]
+
+    perc = match_cnt / match_attempt_cnt * 100
+    log.info(f"Prioritization rules match percentage {perc}")
+    return citizenlab
+
+
+@cz_blueprint.route("/api/_/url-priorities/WIP", methods=["GET"])
+def get_computed_url_priorities():
+    log = current_app.logger
+    try:
+        create_url_priorities_table()
+        p = compute_url_priorities()
+        return make_response(jsonify(p))
+    except Exception as e:
+        log.error(e, exc_info=1)
+        return jerror(str(e), 400)

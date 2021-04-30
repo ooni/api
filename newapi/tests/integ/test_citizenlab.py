@@ -11,23 +11,24 @@ Test using:
     pytest-3 -s --show-capture=no ooniapi/tests/integ/test_citizenlab.py
 """
 
-import os
-
 import pytest
 
 # debdeps: python3-pytest-mock
 
-from ooniapi.citizenlab import URLListManager, DuplicateURL
 import ooniapi.citizenlab
 
-from .test_integration_auth import setup_test_session, _register_and_login
-from .test_integration_auth import reset_smtp_mock
+from .test_integration_auth import _register_and_login
+from .test_integration_auth import reset_smtp_mock, setup_test_session
+from .test_integration_auth import adminsession
+
+# setup_test_session mocks SMTP when the test session starts
 
 
 @pytest.fixture
 def usersession(client):
     # Mock out SMTP, register a user and log in
     user_e = "nick@localhost.local"
+    reset_smtp_mock()
     _register_and_login(client, user_e)
     reset_smtp_mock()
     yield
@@ -213,3 +214,71 @@ def test_ghpr_checkout_update_submit(clean_workdir, client, usersession):
 
     list_global(client, usersession)
     assert get_status(client) == "PR_OPEN"
+
+
+# # Prioritization management # #
+
+
+def test_url_priorities_list(client, adminsession):
+    def match(url):
+        exp = {
+            "category_code": "NEWS",
+            "cc": "*",
+            "domain": "*",
+            "priority": 100,
+            "url": url,
+        }
+        r = client.get("/api/_/url-priorities/list")
+        assert r.status_code == 200, r.json
+        match = [x for x in r.json["rules"] if x == exp]
+        return len(match)
+
+    assert match("BOGUSTEST") == 0
+    assert match("BOGUSTEST2") == 0
+
+    r = client.get("/api/_/url-priorities/list")
+    assert r.status_code == 200, r.json
+    assert len(r.json["rules"]) > 20
+
+    d = dict()
+    r = client.post("/api/_/url-priorities/update", json=d)
+    assert r.status_code == 400, r.json
+
+    # Create
+    xxx = dict(category_code="NEWS", priority=100, url="BOGUSTEST")
+    d = dict(new_entry=xxx)
+    r = client.post("/api/_/url-priorities/update", json=d)
+    assert r.status_code == 200, r.json
+    assert r.json == 1
+
+    # Ensure the new entry is present
+    assert match("BOGUSTEST") == 1
+
+    # Fail to create a duplicate
+    d = dict(new_entry=xxx)
+    r = client.post("/api/_/url-priorities/update", json=d)
+    assert r.status_code == 400, r.json
+
+    # Update
+    yyy = dict(category_code="NEWS", priority=100, url="BOGUSTEST2")
+    d = dict(old_entry=xxx, new_entry=yyy)
+    r = client.post("/api/_/url-priorities/update", json=d)
+    assert r.status_code == 200, r.json
+    assert match("BOGUSTEST") == 0
+    assert match("BOGUSTEST2") == 1
+
+    # Delete
+    d = dict(old_entry=yyy)
+    r = client.post("/api/_/url-priorities/update", json=d)
+    assert r.status_code == 200, r.json
+    assert r.json == 1
+
+    assert match("BOGUSTEST") == 0
+    assert match("BOGUSTEST2") == 0
+
+
+def test_x(client):
+    # WIP
+    r = client.get("/api/_/url-priorities/WIP")
+    assert 0, r.json
+
