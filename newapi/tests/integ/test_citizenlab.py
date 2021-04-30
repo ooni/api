@@ -277,8 +277,35 @@ def test_url_priorities_list(client, adminsession):
     assert match("BOGUSTEST2") == 0
 
 
-def test_x(client):
-    # WIP
-    r = client.get("/api/_/url-priorities/WIP")
-    assert 0, r.json
+def post(client, url, **kw):
+    return client.post(url, json=kw)
 
+
+def post200(client, url, **kw):
+    r = post(client, url, **kw)
+    assert r.status_code == 200, r.json
+    return r
+
+
+def test_x(client, adminsession):
+    xxx = dict(category_code="NEWS", priority=10, cc="it")
+    yyy = dict(category_code="NEWS", priority=5, domain="www.leggo.it")
+    zzz = dict(cc="it", priority=3, url="http://www.leggo.it/")
+
+    post(client, "/api/_/url-priorities/update", old_entry=xxx)
+    post(client, "/api/_/url-priorities/update", old_entry=yyy)
+    post(client, "/api/_/url-priorities/update", old_entry=zzz)
+
+    post200(client, "/api/_/url-priorities/update", new_entry=xxx)
+    post200(client, "/api/_/url-priorities/update", new_entry=yyy)
+    post200(client, "/api/_/url-priorities/update", new_entry=zzz)
+
+    r = client.get("/api/_/url-priorities/WIP")
+    assert r.json
+    for e in r.json:
+        if e["category_code"] == "NEWS" and e["cc"] == "it" and e["url"] == 'http://www.leggo.it/':
+            assert e["priority"] == 118  # 4 rules matched
+
+    post200(client, "/api/_/url-priorities/update", old_entry=xxx)
+    post200(client, "/api/_/url-priorities/update", old_entry=yyy)
+    post200(client, "/api/_/url-priorities/update", old_entry=zzz)
