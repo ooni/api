@@ -42,4 +42,4 @@ pycparser==2.19
 PyYAML==4.2b1
 six==1.14.0
 swagger-spec-validator==2.4.1
-urllib3==1.25.2
+urllib3==1.25.8
