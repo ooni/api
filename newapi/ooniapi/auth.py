@@ -9,6 +9,7 @@ from typing import Optional
 import hashlib
 import re
 import smtplib
+import time
 
 from flask import Blueprint, current_app, request, make_response
 from flask.json import jsonify
@@ -34,6 +35,18 @@ Workflow:
     - call <TODO> using the previous email to get a new temp. login link
     - call the citizenlab CRUD entry points using the cookie
     - call bookmarked searches/urls/msmts entry points using the cookie
+
+Configuration parameters:
+    BASE_URL
+    JWT_ENCRYPTION_KEY
+    MAIL_SERVER
+    MAIL_PORT
+    MAIL_USERNAME
+    MAIL_PASSWORD
+    MAIL_USE_SSL
+    MAIL_SOURCE_ADDRESS
+    LOGIN_EXPIRY_DAYS
+    SESSION_EXPIRY_DAYS
 """
 
 # Courtesy of https://emailregex.com/
@@ -61,36 +74,53 @@ def hash_email_address(email_address: str) -> str:
 
 
 def role_required(roles):
+    # Decorator requiring user to be logged in and have the right role
+    # Also refreshes the session
     if isinstance(roles, str):
-        roles = [roles, ]
+        roles = [roles]
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             token = request.cookies.get("ooni", "")
             try:
-                dec = decode_jwt(token, audience="user_auth")
-                if dec["role"] not in roles:
+                tok = decode_jwt(token, audience="user_auth")
+                del token
+                if tok["role"] not in roles:
                     return jerror("Role not authorized", 401)
             except Exception:
                 return jerror("Authentication required", 401)
 
+            # check for session expunge
             # TODO: cache query
             query = """SELECT threshold
                 FROM session_expunge
-                WHERE account_id = :account_id
-            """
-            account_id = dec["account_id"]
+                WHERE account_id = :account_id """
+            account_id = tok["account_id"]
             query_params = dict(account_id=account_id)
             q = current_app.db_session.execute(query, query_params)
             row = q.fetchone()
             if row:
+                iat = datetime.utcfromtimestamp(tok["iat"])
                 threshold = row[0]
-                iat = datetime.utcfromtimestamp(dec["iat"])
                 if iat < threshold:
                     return jerror("Authentication token expired", 401)
+
             # attach nickname to request
-            request._user_nickname = dec["nick"]
-            return func(*args, **kwargs)
+            request._user_nickname = tok["nick"]
+            # run the HTTP route method
+            resp = func(*args, **kwargs)
+
+            token_age = time.time() - tok["iat"]
+            if token_age > 600:  # refresh token if needed
+                newtoken = _create_session_token(
+                    tok["account_id"], tok["nick"], tok["role"], tok["login_time"]
+                )
+                resp.set_cookie(
+                    "ooni", newtoken, secure=True, httponly=True, samesite="Strict"
+                )
+
+            return resp
 
         return wrapper
 
@@ -212,6 +242,26 @@ def user_register():
     return make_response(jsonify(msg="ok"), 200)
 
 
+def _create_session_token(account_id, nick, role: str, login_time=None) -> str:
+    now = int(time.time())
+    session_exp = now + current_app.config["SESSION_EXPIRY_DAYS"] * 86400
+    if login_time is None:
+        login_time = now
+    login_exp = login_time + current_app.config["LOGIN_EXPIRY_DAYS"] * 86400
+    exp = min(session_exp, login_exp)
+    payload = {
+        "nbf": now,
+        "iat": now,
+        "exp": exp,
+        "aud": "user_auth",
+        "account_id": account_id,
+        "login_time": login_time,
+        "nick": nick,
+        "role": role,
+    }
+    return create_jwt(payload)
+
+
 @metrics.timer("user_login")
 @auth_blueprint.route("/api/v1/user_login", methods=["GET"])
 def user_login():
@@ -238,23 +288,16 @@ def user_login():
         return jerror("Invalid credentials", code=401)
 
     log.info("user login successful")
-    now = datetime.utcnow()
     # Store account role in token to prevent frequent DB lookups
     role = _get_account_role(dec["account_id"]) or "user"
-    payload = {
-        "nbf": now,
-        "iat": now,
-        "aud": "user_auth",
-        "account_id": dec["account_id"],
-        "nick": dec["nick"],
-        "role": role,
-    }
-    token = create_jwt(payload)
-    r = make_response(jsonify(token=token), 200)
+
+    token = _create_session_token(dec["account_id"], dec["nick"], role)
+    r = make_response(jsonify(), 200)
     r.set_cookie("ooni", token, secure=True, httponly=True, samesite="Strict")
     return r
 
 
+# TODO: add table setup
 """
 CREATE TABLE IF NOT EXISTS accounts (
     account_id text PRIMARY KEY,
@@ -275,7 +318,7 @@ GRANT SELECT ON TABLE public.session_expunge TO readonly;
 
 def _set_account_role(email_address, role: str) -> int:
     account_id = hash_email_address(email_address)
-    #log.info(f"Giving account {account_id} role {role}")
+    # log.info(f"Giving account {account_id} role {role}")
     query = """INSERT INTO accounts (account_id, role)
         VALUES(:account_id, :role)
         ON CONFLICT (account_id) DO
@@ -364,10 +407,10 @@ def get_account_role(email_address):
     role = _get_account_role(account_id)
     if role is None:
         log.info(f"Getting account {account_id} role: not found")
-        return ""
+        return make_response("")
 
     log.info(f"Getting account {account_id} role: {role}")
-    return role
+    return make_response(role)
 
 
 @auth_blueprint.route("/api/v1/set_session_expunge", methods=["POST"])
@@ -409,3 +452,14 @@ def set_session_expunge():
     log.info(f"Expunge set {q}")
     current_app.db_session.commit()
     return ""
+
+
+def _remove_from_session_expunge(email_address: str) -> None:
+    account_id = hash_email_address(email_address)
+    query = "DELETE FROM session_expunge WHERE account_id = :account_id"
+    query_params = dict(account_id=account_id)
+    current_app.db_session.execute(query, query_params)
+    current_app.db_session.commit()
+
+
+# TODO: purge session_expunge

@@ -731,6 +731,9 @@ def post_update_url_priority():
     if not old and not new:
         return jerror("Pointless update", 400)
 
+    # Use an explicit marker "*" to represent "match everything" because NULL
+    # cannot be used in UNIQUE constraints; also "IS NULL" is difficult to
+    # handle in query generation. See match_prio_rule(...)
     for k in ["category_code", "cc", "domain", "url", "priority"]:
         if old and k not in old:
             old[k] = "*"
@@ -767,6 +770,8 @@ def post_update_url_priority():
 
 
 def match_prio_rule(cz, pr: dict) -> bool:
+    """Match a priority rule to citizenlab entry
+    """
     for k in ["category_code", "cc", "domain", "url"]:
         if pr[k] not in ("*", cz[k]):
             return False
