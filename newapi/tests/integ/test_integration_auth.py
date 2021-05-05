@@ -14,6 +14,7 @@ import os
 from unittest.mock import MagicMock, Mock
 
 import pytest
+from freezegun import freeze_time  # debdeps: python3-freezegun
 
 import ooniapi.auth
 
@@ -63,6 +64,7 @@ def adminsession(client, app):
         yield
         ooniapi.auth._delete_account_data(admin_e)
         reset_smtp_mock()
+
 
 def reset_smtp_mock():
     ooniapi.auth.smtplib.SMTP.reset_mock()
@@ -184,3 +186,54 @@ def test_role_set_with_expunged_token(client, mocksmtp, integtest_admin):
 
     r = client.get("/api/v1/get_account_role/" + admin_e)
     assert r.status_code == 401
+
+
+def decode_token(client):
+    # Decode JWT token in the cookie jar
+    assert len(client.cookie_jar) == 1
+    cookie = list(client.cookie_jar)[0].value
+    tok = ooniapi.auth.decode_jwt(cookie, audience="user_auth")
+    return tok
+
+
+def test_session_refresh_and_expire(client, mocksmtp, integtest_admin):
+    # Using:
+    # SESSION_EXPIRY_DAYS = 2
+    # LOGIN_EXPIRY_DAYS = 7
+    with freeze_time("2012-01-14"):
+        ooniapi.auth._remove_from_session_expunge(admin_e)
+        _register_and_login(client, admin_e)
+        tok = decode_token(client)
+        assert tok == {
+            "nbf": 1326499200,
+            "iat": 1326499200,
+            "exp": 1326672000,
+            "aud": "user_auth",
+            "account_id": "71e398652ecfb1be6a2359923c7df008",
+            "login_time": 1326499200,
+            "nick": "nick",
+            "role": "admin",
+        }
+        r = client.get("/api/v1/get_account_role/integtest@openobservatory.org")
+        assert r.status_code == 200
+
+    with freeze_time("2012-01-15"):
+        # The session is still valid but the token will be replaced
+        r = client.get("/api/v1/get_account_role/integtest@openobservatory.org")
+        assert r.status_code == 200
+        assert r.data == b'admin'
+        assert decode_token(client) == {
+            "nbf": 1326585600,
+            "iat": 1326585600,
+            "exp": 1326758400,
+            "aud": "user_auth",
+            "account_id": "71e398652ecfb1be6a2359923c7df008",
+            "login_time": 1326499200,
+            "nick": "nick",
+            "role": "admin",
+        }
+
+    with freeze_time("2012-02-01"):
+        # The login is expired
+        r = client.get("/api/v1/get_account_role/integtest@openobservatory.org")
+        assert r.status_code == 401
