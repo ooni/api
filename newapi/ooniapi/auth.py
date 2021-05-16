@@ -73,6 +73,15 @@ def hash_email_address(email_address: str) -> str:
     return hashlib.blake2b(em, key=key, digest_size=16).hexdigest()
 
 
+def set_JWT_cookie(res, token):
+    """Set/overwrite the "ooni" cookie in the browser:
+    - secure: used only on HTTPS
+    - httponly: block javascript in the browser from accessing it
+    - samesite=Strict: send the cookie only between the browser and this API
+    """
+    res.set_cookie("ooni", token, secure=True, httponly=True, samesite="Strict")
+
+
 def role_required(roles):
     # Decorator requiring user to be logged in and have the right role
     # Also refreshes the session
@@ -116,9 +125,7 @@ def role_required(roles):
                 newtoken = _create_session_token(
                     tok["account_id"], tok["nick"], tok["role"], tok["login_time"]
                 )
-                resp.set_cookie(
-                    "ooni", newtoken, secure=True, httponly=True, samesite="Strict"
-                )
+                set_JWT_cookie(resp, newtoken)
 
             return resp
 
@@ -293,7 +300,7 @@ def user_login():
 
     token = _create_session_token(dec["account_id"], dec["nick"], role)
     r = make_response(jsonify(), 200)
-    r.set_cookie("ooni", token, secure=True, httponly=True, samesite="Strict")
+    set_JWT_cookie(r, token)
     return r
 
 
