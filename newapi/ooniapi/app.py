@@ -7,7 +7,6 @@ import sys
 
 from flask import Flask, json
 
-# from flask_misaka import Misaka
 from flask_cors import CORS  # debdeps: python3-flask-cors
 # python3-flask-cors has unnecessary dependencies :-/
 from ooniapi.rate_limit_quotas import FlaskLimiter
@@ -15,14 +14,10 @@ from ooniapi.rate_limit_quotas import FlaskLimiter
 try:
     from systemd.journal import JournalHandler  # debdeps: python3-systemd
     enable_journal = True
-except:
+except ImportError:
     enable_journal = False
 
 from flasgger import Swagger
-
-#from flask_mail import Mail  # debdeps: python3-flask-mail
-
-#from flask_security import Security  # debdeps: python3-flask-security
 
 from decimal import Decimal
 from ooniapi.database import init_db
