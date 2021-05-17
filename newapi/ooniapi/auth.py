@@ -13,6 +13,7 @@ import time
 
 from flask import Blueprint, current_app, request, make_response
 from flask.json import jsonify
+import flask.wrappers
 import jwt  # debdeps: python3-jwt
 
 from ooniapi.config import metrics
@@ -73,12 +74,13 @@ def hash_email_address(email_address: str) -> str:
     return hashlib.blake2b(em, key=key, digest_size=16).hexdigest()
 
 
-def set_JWT_cookie(res, token):
+def set_JWT_cookie(res, token: str) -> None:
     """Set/overwrite the "ooni" cookie in the browser:
     - secure: used only on HTTPS
     - httponly: block javascript in the browser from accessing it
     - samesite=Strict: send the cookie only between the browser and this API
     """
+    assert isinstance(res, flask.wrappers.Response), type(res)
     res.set_cookie("ooni", token, secure=True, httponly=True, samesite="Strict")
 
 
@@ -119,6 +121,7 @@ def role_required(roles):
             request._user_nickname = tok["nick"]
             # run the HTTP route method
             resp = func(*args, **kwargs)
+            assert isinstance(resp, flask.wrappers.Response), type(resp)
 
             token_age = time.time() - tok["iat"]
             if token_age > 600:  # refresh token if needed
@@ -371,7 +374,7 @@ def set_account_role():
 
     r = _set_account_role(email_address, role)
     log.info(f"Role set {r}")
-    return ""
+    return jsonify()
 
 
 def _delete_account_data(email_address: str) -> None:
@@ -458,7 +461,7 @@ def set_session_expunge():
     q = current_app.db_session.execute(query, query_params).rowcount
     log.info(f"Expunge set {q}")
     current_app.db_session.commit()
-    return ""
+    return jsonify()
 
 
 def _remove_from_session_expunge(email_address: str) -> None:

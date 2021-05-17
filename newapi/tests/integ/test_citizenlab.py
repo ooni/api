@@ -123,17 +123,17 @@ def update_url_basic(client, usersession):
     r = client.post("/api/v1/url-submission/update-url", json=d)
     assert r.status_code == 200, r.data
 
-    assert get_status(client) == "IN_PROGRESS"
+    assert get_state(client) == "IN_PROGRESS"
 
 
-def get_status(client):
+def get_state(client):
     r = client.get("/api/v1/url-submission/state")
     assert r.status_code == 200
-    return r.data.decode()
+    return r.json["state"]
 
 
 def test_pr_state(client, usersession):
-    assert get_status(client) == "CLEAN"
+    assert get_state(client) == "CLEAN"
 
 
 # # Tests with mocked-out GitHub # #
@@ -171,25 +171,25 @@ def clean_workdir(app, tmp_path):
 
 
 def test_checkout_update_submit(clean_workdir, client, usersession, mock_requests):
-    assert get_status(client) == "CLEAN"
+    assert get_state(client) == "CLEAN"
 
     list_global(client, usersession)
-    assert get_status(client) == "CLEAN"
+    assert get_state(client) == "CLEAN"
 
     add_url(client, usersession)
-    assert get_status(client) == "IN_PROGRESS"
+    assert get_state(client) == "IN_PROGRESS"
 
     update_url_basic(client, usersession)
 
     r = client.post("/api/v1/url-submission/submit")
     assert r.status_code == 200
 
-    assert get_status(client) == "PR_OPEN"
+    assert get_state(client) == "PR_OPEN"
 
     # Before getting the list URLListManager will check if the PR is done
     # (it is) and set the state to CLEAN
     list_global(client, usersession)
-    assert get_status(client) == "CLEAN"
+    assert get_state(client) == "CLEAN"
 
 
 # # Tests with real GitHub # #
@@ -197,23 +197,23 @@ def test_checkout_update_submit(clean_workdir, client, usersession, mock_request
 
 @pytest.mark.skipif(not pytest.config.option.ghpr, reason="use --ghpr to run")
 def test_ghpr_checkout_update_submit(clean_workdir, client, usersession):
-    assert get_status(client) == "CLEAN"
+    assert get_state(client) == "CLEAN"
 
     list_global(client, usersession)
-    assert get_status(client) == "CLEAN"
+    assert get_state(client) == "CLEAN"
 
     add_url(client, usersession)
-    assert get_status(client) == "IN_PROGRESS"
+    assert get_state(client) == "IN_PROGRESS"
 
     update_url_basic(client, usersession)
 
     r = client.post("/api/v1/url-submission/submit")
     assert r.status_code == 200
 
-    assert get_status(client) == "PR_OPEN"
+    assert get_state(client) == "PR_OPEN"
 
     list_global(client, usersession)
-    assert get_status(client) == "PR_OPEN"
+    assert get_state(client) == "PR_OPEN"
 
 
 # # Prioritization management # #

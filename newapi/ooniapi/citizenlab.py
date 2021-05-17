@@ -182,7 +182,7 @@ class URLListManager:
     def get_user_repo(self, username: str):
         repo_path = self.get_user_repo_path(username)
         if not os.path.exists(repo_path):
-            print(f"creating {repo_path}")
+            log.info(f"creating {repo_path}")
             self.repo.git.worktree(
                 "add", "-b", self.get_user_branchname(username), repo_path
             )
@@ -560,9 +560,6 @@ def get_workflow_state():
         description: New URL confirmation
         schema:
           type: object
-          properties:
-            new_entry:
-              type: array
     """
     global log
     log = current_app.logger
@@ -570,7 +567,7 @@ def get_workflow_state():
     log.debug("get citizenlab workflow state")
     ulm = get_url_list_manager()
     state = ulm.get_state(username)
-    return state
+    return jsonify(state=state)
 
 
 @cz_blueprint.route("/api/v1/url-submission/submit", methods=["POST"])
@@ -581,7 +578,7 @@ def post_propose_changes():
     responses:
       200:
         description: Pull request number
-        type: string
+        type: object
     """
     global log
     log = current_app.logger
@@ -589,7 +586,7 @@ def post_propose_changes():
     username = get_username()
     ulm = get_url_list_manager()
     pr_id = ulm.propose_changes(username)
-    return pr_id
+    return jsonify(pr_id=pr_id)
 
 
 # # Prioritization management # #
