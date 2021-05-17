@@ -22,6 +22,14 @@ import requests
 
 from ooniapi.auth import role_required
 
+"""
+
+URL prioritization:
+create_url_priorities_table() creates the url_priorities table.
+It contains rules on category_code, cc, domain and url to assign priorities.
+Values can be wildcards "*". A citizenlab entry can match multiple rules.
+"""
+
 # TODO: add per-user locking
 
 log = None
@@ -593,6 +601,7 @@ def post_propose_changes():
 
 
 def create_url_priorities_table() -> None:
+    # See description in module docstring
     log = current_app.logger
     sql = "SELECT to_regclass('url_priorities')"
     q = current_app.db_session.execute(sql)
@@ -800,13 +809,14 @@ def compute_url_priorities():
     return citizenlab
 
 
+# TODO: remove this
 @cz_blueprint.route("/api/_/url-priorities/WIP", methods=["GET"])
 def get_computed_url_priorities():
     log = current_app.logger
     try:
         create_url_priorities_table()
         p = compute_url_priorities()
-        return make_response(jsonify(p))
+        return jsonify(p)
     except Exception as e:
         log.error(e, exc_info=1)
         return jerror(str(e), 400)
