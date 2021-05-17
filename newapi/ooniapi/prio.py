@@ -187,6 +187,10 @@ def list_test_urls():
         in: query
         type: string
         description: Two letter, uppercase country code
+      - name: probe_cc
+        in: query
+        type: string
+        description: Two letter, uppercase country code (alternative to country_code)
       - name: category_codes
         in: query
         type: string
@@ -226,7 +230,8 @@ def list_test_urls():
     log = current_app.logger
     param = request.args.get
     try:
-        country_code = (param("country_code") or "ZZ").upper()
+        country_code = param("country_code") or param("probe_cc") or "ZZ"
+        country_code = country_code.upper()
         category_codes = param("category_codes") or ""
         category_codes = set(c.strip().upper() for c in category_codes.split(","))
         category_codes.discard("")
