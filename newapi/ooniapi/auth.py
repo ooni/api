@@ -401,13 +401,18 @@ def _get_account_role(account_id: str) -> Optional[str]:
 @auth_blueprint.route("/api/v1/get_account_role/<email_address>")
 @role_required("admin")
 def get_account_role(email_address):
-    """Get account role. Return an empty string if the account is not found.
+    """Get account role. Return an error message if the account is not found.
     ---
     parameters:
       - name: email_address
         in: path
         required: true
         type: string
+    responses:
+      200:
+        description: Role or error message
+        schema:
+          type: object
     """
     log = current_app.logger
     email_address = email_address.strip().lower()
@@ -417,10 +422,10 @@ def get_account_role(email_address):
     role = _get_account_role(account_id)
     if role is None:
         log.info(f"Getting account {account_id} role: not found")
-        return make_response("")
+        return jerror("Account not found")
 
     log.info(f"Getting account {account_id} role: {role}")
-    return make_response(role)
+    return jsonify(role=role)
 
 
 @auth_blueprint.route("/api/v1/set_session_expunge", methods=["POST"])
