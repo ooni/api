@@ -52,3 +52,6 @@ def client(app):
 
 def pytest_addoption(parser):
     parser.addoption("--ghpr", action="store_true", help="enable GitHub integ tests")
+
+def pytest_configure(config):
+    pytest.run_ghpr = config.getoption("--ghpr")

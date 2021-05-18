@@ -195,7 +195,7 @@ def test_checkout_update_submit(clean_workdir, client, usersession, mock_request
 # # Tests with real GitHub # #
 
 
-@pytest.mark.skipif(not pytest.config.option.ghpr, reason="use --ghpr to run")
+@pytest.mark.skipif(not pytest.run_ghpr, reason="use --ghpr to run")
 def test_ghpr_checkout_update_submit(clean_workdir, client, usersession):
     assert get_state(client) == "CLEAN"
 
