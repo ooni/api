@@ -125,7 +125,7 @@ FROM (
     SELECT priority, url, cc, category_code
     FROM citizenlab
     WHERE
-      UPPER(citizenlab.cc) = :cc
+      citizenlab.cc = :cc_low
       OR citizenlab.cc = 'ZZ'
 ) AS citiz
 LEFT OUTER JOIN (
@@ -141,7 +141,7 @@ LEFT OUTER JOIN (
 ON (citiz.url = cnt.input)
 ORDER BY COALESCE(msmt_cnt, 0)::float / GREATEST(priority, 1), RANDOM()
 """
-    q = current_app.db_session.execute(sql, dict(cc=cc))
+    q = current_app.db_session.execute(sql, dict(cc=cc, cc_low=cc.lower()))
     entries = tuple(q.fetchall())
     log.info("%d entries", len(entries))
     return entries
