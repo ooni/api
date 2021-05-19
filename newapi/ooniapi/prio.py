@@ -149,8 +149,7 @@ ORDER BY COALESCE(msmt_cnt, 0)::float / GREATEST(priority, 1), RANDOM()
 
 @metrics.timer("generate_test_list")
 def generate_test_list(country_code: str, category_codes: tuple, limit: int):
-    """Generate test list based on the amount of measurements in the last N days
-    """
+    """Generate test list based on the amount of measurements in the last N days"""
     log = current_app.logger
     out = []
     li = fetch_reactive_url_list(country_code)
