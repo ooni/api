@@ -84,8 +84,6 @@ def postj(client, url, **kw):
 
 # # Tests
 
-# TODO remove cookh
-
 
 def test_login_user_bogus_token(client, mocksmtp):
     r = client.get(f"/api/v1/user_login?k=BOGUS")
@@ -149,11 +147,11 @@ def test_role_set_not_allowed(client, mocksmtp):
     r = client.post("/api/v1/set_account_role", json=d)
     assert r.status_code == 401
 
-    cookh = _register_and_login(client, user_e)
+    _register_and_login(client, user_e)
 
     # We are logged in with role "user" and still not allowed to call this
     d = dict(email_address=admin_e, role="admin")
-    r = client.post("/api/v1/set_account_role", headers=cookh, json=d)
+    r = client.post("/api/v1/set_account_role", json=d)
     assert r.status_code == 401
 
     r = client.get("/api/v1/get_account_role/integtest@openobservatory.org")
@@ -161,11 +159,11 @@ def test_role_set_not_allowed(client, mocksmtp):
 
 
 def test_role_set(client, mocksmtp, integtest_admin):
-    cookh = _register_and_login(client, admin_e)
+    _register_and_login(client, admin_e)
 
     # We are logged in with role "admin"
     d = dict(email_address=admin_e, role="admin")
-    r = client.post("/api/v1/set_account_role", headers=cookh, json=d)
+    r = client.post("/api/v1/set_account_role", json=d)
     assert r.status_code == 200
 
     r = client.get("/api/v1/get_account_role/integtest@openobservatory.org")
@@ -178,10 +176,10 @@ def test_role_set(client, mocksmtp, integtest_admin):
 
 
 def test_role_set_with_expunged_token(client, mocksmtp, integtest_admin):
-    cookh = _register_and_login(client, admin_e)
+    _register_and_login(client, admin_e)
     # As admin, I expunge my own session token
     d = dict(email_address=admin_e, role="admin")
-    r = client.post("/api/v1/set_session_expunge", headers=cookh, json=d)
+    r = client.post("/api/v1/set_session_expunge", json=d)
     assert r.status_code == 200
 
     r = client.get("/api/v1/get_account_role/" + admin_e)
