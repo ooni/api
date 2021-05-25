@@ -135,7 +135,7 @@ def _register_and_login(client, email_address):
     assert len(cookies) == 1
     c = cookies[0]
     assert c.startswith("ooni=")
-    assert c.endswith("; Secure; HttpOnly; Path=/; SameSite=Strict")
+    assert c.endswith("; Secure; HttpOnly; Path=/")
     return {"Set-Cookie": c}
 
 
@@ -170,7 +170,7 @@ def test_role_set(client, mocksmtp, integtest_admin):
 
     r = client.get("/api/v1/get_account_role/integtest@openobservatory.org")
     assert r.status_code == 200
-    assert r.data == b"admin"
+    assert r.json == {"role": "admin"}
 
     d = dict(email_address=admin_e, role="user")
     r = client.post("/api/v1/set_account_role", json=d)
@@ -221,7 +221,7 @@ def test_session_refresh_and_expire(client, mocksmtp, integtest_admin):
         # The session is still valid but the token will be replaced
         r = client.get("/api/v1/get_account_role/integtest@openobservatory.org")
         assert r.status_code == 200
-        assert r.data == b'admin'
+        assert r.json == {"role": "admin"}
         assert decode_token(client) == {
             "nbf": 1326585600,
             "iat": 1326585600,
