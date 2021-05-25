@@ -142,7 +142,7 @@ def test_user_register_and_get_metadata(client, mocksmtp):
     assert r.json == {}
     _register_and_login(client, user_e)
     r = client.get("/api/_/account_metadata")
-    assert r.json == {'nick': 'nick', 'role': 'user'}
+    assert r.json == {"nick": "nick", "role": "user"}
 
 
 def test_role_set_not_allowed(client, mocksmtp):
@@ -170,9 +170,24 @@ def test_role_set(client, mocksmtp, integtest_admin):
     r = client.post("/api/v1/set_account_role", json=d)
     assert r.status_code == 200
 
+    d = dict(email_address="BOGUS_EMAIL_ADDR", role="admin")
+    r = client.post("/api/v1/set_account_role", json=d)
+    assert r.status_code == 400
+
+    d = dict(email_address=admin_e, role="BOGUS_ROLE")
+    r = client.post("/api/v1/set_account_role", json=d)
+    assert r.status_code == 400
+
     r = client.get("/api/v1/get_account_role/integtest@openobservatory.org")
     assert r.status_code == 200
     assert r.json == {"role": "admin"}
+
+    r = client.get("/api/v1/get_account_role/BOGUS_EMAIL_ADDR")
+    assert r.status_code == 400
+
+    r = client.get("/api/v1/get_account_role/valid_but_not_found@example.org")
+    assert r.status_code == 400
+    assert r.json == {"error": "Account not found"}
 
     d = dict(email_address=admin_e, role="user")
     r = client.post("/api/v1/set_account_role", json=d)
@@ -181,6 +196,11 @@ def test_role_set(client, mocksmtp, integtest_admin):
 
 def test_role_set_with_expunged_token(client, mocksmtp, integtest_admin):
     _register_and_login(client, admin_e)
+
+    d = dict(email_address="BOGUS_EMAIL_ADDR", role="admin")
+    r = client.post("/api/v1/set_session_expunge", json=d)
+    assert r.status_code == 400
+
     # As admin, I expunge my own session token
     d = dict(email_address=admin_e, role="admin")
     r = client.post("/api/v1/set_session_expunge", json=d)
