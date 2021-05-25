@@ -120,7 +120,7 @@ def init_app(app, testmode=False):
 
     # FIXME
     # CORS(app, resources={r"/api/*": {"origins": "*"}})
-    CORS(app, resources={r"*": {"origins": "*"}})
+    CORS(app, resources={r"*": {"origins": "*"}}, supports_credentials=True)
 
 
 def check_config(config):
