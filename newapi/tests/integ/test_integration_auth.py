@@ -137,8 +137,12 @@ def _register_and_login(client, email_address):
     return {"Set-Cookie": c}
 
 
-def test_user_register(client, mocksmtp):
+def test_user_register_and_get_metadata(client, mocksmtp):
+    r = client.get("/api/_/account_metadata")
+    assert r.json == {}
     _register_and_login(client, user_e)
+    r = client.get("/api/_/account_metadata")
+    assert r.json == {'nick': 'nick', 'role': 'user'}
 
 
 def test_role_set_not_allowed(client, mocksmtp):
