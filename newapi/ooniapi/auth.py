@@ -17,6 +17,7 @@ import flask.wrappers
 import jwt  # debdeps: python3-jwt
 
 from ooniapi.config import metrics
+from ooniapi.utils import cachedjson, nocachejson
 
 # from ooniapi.utils import cachedjson
 
@@ -304,6 +305,7 @@ def user_login():
     token = _create_session_token(dec["account_id"], dec["nick"], role)
     r = make_response(jsonify(), 200)
     set_JWT_cookie(r, token)
+    r.cache_control.no_cache = True
     return r
 
 
@@ -417,10 +419,10 @@ def get_account_metadata():
     try:
         token = request.cookies.get("ooni", "")
         tok = decode_jwt(token, audience="user_auth")
-        return jsonify(role=tok["role"], nick=tok["nick"])
+        return nocachejson(role=tok["role"], nick=tok["nick"])
 
     except Exception:
-        return jsonify({})
+        return nocachejson({})
 
 
 @auth_blueprint.route("/api/v1/get_account_role/<email_address>")
@@ -456,7 +458,7 @@ def get_account_role(email_address):
         return jerror("Account not found")
 
     log.info(f"Getting account {account_id} role: {role}")
-    return jsonify(role=role)
+    return nocachejson(role=role)
 
 
 @auth_blueprint.route("/api/v1/set_session_expunge", methods=["POST"])
@@ -503,7 +505,7 @@ def set_session_expunge():
     q = current_app.db_session.execute(query, query_params).rowcount
     log.info(f"Expunge set {q}")
     current_app.db_session.commit()
-    return jsonify()
+    return nocachejson()
 
 
 def _remove_from_session_expunge(email_address: str) -> None:
