@@ -404,6 +404,25 @@ def _get_account_role(account_id: str) -> Optional[str]:
     return None
 
 
+@auth_blueprint.route("/api/_/account_metadata")
+def get_account_metadata():
+    """Get account metadata for logged-in users
+    ---
+    responses:
+      200:
+        description: Username and role if logged in.
+        schema:
+          type: object
+    """
+    try:
+        token = request.cookies.get("ooni", "")
+        tok = decode_jwt(token, audience="user_auth")
+        return jsonify(role=tok["role"], nick=tok["nick"])
+
+    except Exception:
+        return jsonify({})
+
+
 @auth_blueprint.route("/api/v1/get_account_role/<email_address>")
 @role_required("admin")
 def get_account_role(email_address):
