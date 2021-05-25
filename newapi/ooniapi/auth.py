@@ -345,8 +345,14 @@ def _set_account_role(email_address, role: str) -> int:
 @auth_blueprint.route("/api/v1/set_account_role", methods=["POST"])
 @role_required("admin")
 def set_account_role():
-    """Set a role to a given account identified by an email address
+    """Set a role to a given account identified by an email address.
+    Only for admins.
     ---
+    security:
+      cookieAuth:
+        type: JWT
+        in: cookie
+        name: ooni
     parameters:
       - in: body
         name: email address and role
@@ -402,7 +408,13 @@ def _get_account_role(account_id: str) -> Optional[str]:
 @role_required("admin")
 def get_account_role(email_address):
     """Get account role. Return an error message if the account is not found.
+    Only for admins.
     ---
+    security:
+      cookieAuth:
+        type: JWT
+        in: cookie
+        name: ooni
     parameters:
       - name: email_address
         in: path
@@ -431,8 +443,14 @@ def get_account_role(email_address):
 @auth_blueprint.route("/api/v1/set_session_expunge", methods=["POST"])
 @role_required("admin")
 def set_session_expunge():
-    """Force refreshing all session tokens for a given account
+    """Force refreshing all session tokens for a given account.
+    Only for admins.
     ---
+    security:
+      cookieAuth:
+        type: JWT
+        in: cookie
+        name: ooni
     parameters:
       - in: body
         name: email address
