@@ -161,8 +161,8 @@ def _send_email(dest_addr: str, msg: EmailMessage) -> None:
 def send_login_email(dest_addr, nick, token: str) -> None:
     """Format and send a registration/login  email"""
     src_addr = current_app.config["MAIL_SOURCE_ADDRESS"]
-    baseurl = current_app.config["BASE_URL"]
-    url = urljoin(baseurl, f"/api/v1/user_login?k={token}")
+    baseurl = current_app.config["LOGIN_BASE_URL"]
+    url = urljoin(baseurl, f"?token={token}")
 
     msg = EmailMessage()
     msg["Subject"] = "OONI Account activation"
