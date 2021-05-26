@@ -25,7 +25,6 @@ blockdiag {
 from collections import namedtuple
 from typing import List, Dict
 import random
-import time
 
 from flask import Blueprint, current_app, request
 from flask.json import jsonify
@@ -86,7 +85,6 @@ def failover_generate_test_list(country_code: str, category_codes: tuple, limit:
     if not category_codes:
         category_codes = tuple(failover_test_items.keys())
 
-    log = current_app.logger
     candidates: List[CTZ] = []
     for catcode in category_codes:
         if catcode not in failover_test_items:
@@ -149,8 +147,8 @@ ORDER BY COALESCE(msmt_cnt, 0)::float / GREATEST(priority, 1), RANDOM()
 
 @metrics.timer("generate_test_list")
 def generate_test_list(country_code: str, category_codes: tuple, limit: int):
-    """Generate test list based on the amount of measurements in the last N days"""
-    log = current_app.logger
+    """Generate test list based on the amount of measurements in the last
+    N days"""
     out = []
     li = fetch_reactive_url_list(country_code)
     for entry in li:
@@ -158,13 +156,12 @@ def generate_test_list(country_code: str, category_codes: tuple, limit: int):
             continue
 
         cc = "XX" if entry["cc"] == "ZZ" else entry["cc"].upper()
-        out.append(
-            {
-                "category_code": entry["category_code"],
-                "url": entry["url"],
-                "country_code": cc,
-            }
-        )
+        i = {
+            "category_code": entry["category_code"],
+            "url": entry["url"],
+            "country_code": cc,
+        }
+        out.append(i)
         if len(out) >= limit:
             break
 
