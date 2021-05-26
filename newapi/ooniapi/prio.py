@@ -5,7 +5,7 @@ OONI Probe Services API - reactive URL prioritization
 based on the citizenlab URL list and the measurements count from the last
 7 days.
 
-The ooni-update-counters service updates the counters table at intervals
+The ooni-update-counters service updates the counters_test_list table at intervals
 
 The ooni-update-citizenlab service updates the citizenlab table at intervals
 
@@ -14,8 +14,8 @@ blockdiag {
   Probes [color = "#ffeeee"];
   "API: test-list/urls" [color = "#eeeeff"];
   Probes -> "API: receive msmt" -> "Fastpath" -> "DB: fastpath table";
-  "DB: fastpath table" -> "ooni-update-counters service" -> "DB: counters table";
-  "DB: counters table" -> "API: test-list/urls" -> Probes;
+  "DB: fastpath table" -> "ooni-update-counters service" -> "DB: counters_test_list table";
+  "DB: counters_test_list table" -> "API: test-list/urls" -> Probes;
   "DB: citizenlab table" -> "API: test-list/urls";
 }
 ```
@@ -127,14 +127,9 @@ FROM (
       OR citizenlab.cc = 'ZZ'
 ) AS citiz
 LEFT OUTER JOIN (
-    SELECT input, SUM(measurement_count) AS msmt_cnt
-    FROM counters
-    WHERE
-        measurement_start_day < CURRENT_DATE + interval '1 days'
-        AND measurement_start_day > CURRENT_DATE - interval '8 days'
-        AND probe_cc = :cc
-        AND test_name = 'web_connectivity'
-    GROUP BY input
+    SELECT input, msmt_cnt
+    FROM counters_test_list
+    WHERE probe_cc = :cc
 ) AS cnt
 ON (citiz.url = cnt.input)
 ORDER BY COALESCE(msmt_cnt, 0)::float / GREATEST(priority, 1), RANDOM()
