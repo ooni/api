@@ -350,10 +350,12 @@ class URLListManager:
         return j["url"]
 
     def is_pr_resolved(self, username):
-        pr_id = (self.get_pr_id(username),)
+        pr_id = self.get_pr_id(username)
+        assert pr_id.startswith("https")
         auth = HTTPBasicAuth(self.github_user, self.github_token)
-        r = requests.post(pr_id, auth=auth)
+        r = requests.get(pr_id, auth=auth)
         j = r.json()
+        assert "state" in j
         return j["state"] != "open"
 
     def push_to_repo(self, username):
