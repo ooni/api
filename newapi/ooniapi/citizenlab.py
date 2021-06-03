@@ -245,9 +245,16 @@ class URLListManager:
         if state == "IN_PROGRESS":
             return
         if self.is_pr_resolved(username):
-            shutil.rmtree(self.get_user_repo_path(username))
-            self.repo.git.worktree("prune")
-            self.repo.delete_head(self.get_user_branchname(username), force=True)
+            path = self.get_user_repo_path(username)
+            bname = self.get_user_branchname(username)
+            log.debug(f"Deleting {path}")
+            try:
+                # TODO: investigate
+                shutil.rmtree(path)
+                self.repo.git.worktree("prune")
+                self.repo.delete_head(bname, force=True)
+            except Exception as e:
+                log.info(f"Error deleting {path} {e}")
 
             self.set_state(username, "CLEAN")
 
@@ -352,6 +359,7 @@ class URLListManager:
     def is_pr_resolved(self, username):
         pr_id = self.get_pr_id(username)
         assert pr_id.startswith("https")
+        log.debug(f"Fetching PR {pr_id}")
         auth = HTTPBasicAuth(self.github_user, self.github_token)
         r = requests.get(pr_id, auth=auth)
         j = r.json()
