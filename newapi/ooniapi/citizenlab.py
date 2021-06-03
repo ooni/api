@@ -469,6 +469,9 @@ def get_test_list(country_code):
     username = get_username()
     ulm = get_url_list_manager()
     tl = ulm.get_test_list(username, country_code)
+    # make an array of dicts
+    header = tl[0]
+    tl = [dict(zip(header, row)) for row in tl[1:]]
     return make_response(jsonify(tl))
 
 
