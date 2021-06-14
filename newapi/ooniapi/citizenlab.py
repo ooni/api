@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 from hashlib import sha224
-from typing import List
+from typing import Dict
 import csv
 import io
 import logging
@@ -282,11 +282,18 @@ class URLListManager:
 
             self.set_state(username, "IN_PROGRESS")
 
-    def update(self, username, cc, old_entry, new_entry, comment):
+    def update(self, username: str, cc: str, old_entry: dict, new_entry: dict, comment):
+        ks = ("url", "category_code", "category_desc", "date_str", "user", "notes")
+        if old_entry:
+            old_entry_li = [old_entry[k] for k in ks]
+        if new_entry:
+            new_entry_li = [new_entry[k] for k in ks]
         log.debug("updating existing entry")
         cc = cc.lower()
         if len(cc) != 2:
             raise Exception("Invalid country code")
+
+        #entry["category_desc"] = CATEGORY_CODES[entry["category_code"]]
 
         self.sync_state(username)
         self.pull_origin_repo()
@@ -302,8 +309,8 @@ class URLListManager:
 
             csv_f = self.get_user_repo_path(username) / "lists" / f"{cc}.csv"
 
-            new_url = new_entry[0]
-            if new_url != old_entry[0]:
+            new_url = new_entry["url"]
+            if new_url != old_entry["url"]:
                 # If the URL is being changed check for collisions
                 if self.is_duplicate_url(username, cc, new_url):
                     raise Exception(f"{new_url} is duplicate")
@@ -317,9 +324,13 @@ class URLListManager:
 
                 found = False
                 for row in csv_reader:
-                    if row == old_entry:
+                    if row == old_entry_li:
                         found = True
-                        csv_writer.writerow(new_entry)
+                        if new_entry:
+                            csv_writer.writerow(new_entry)  # update entry
+                        else:
+                            pass  # delete entry
+
                     else:
                         csv_writer.writerow(row)
 
@@ -411,14 +422,12 @@ def check_url(url):
         raise BadURL()
 
 
-def validate_entry(entry: List[str]) -> None:
-    url, category_code, category_desc, date_str, user, notes = entry
-    check_url(url)
-    if category_code not in CATEGORY_CODES:
+def validate_entry(entry: Dict[str, str]) -> None:
+    check_url(entry["url"])
+    if entry["category_code"] not in CATEGORY_CODES:
         raise BadCategoryCode()
-    if category_desc != CATEGORY_CODES[category_code]:
-        raise BadCategoryDescription()
     try:
+        date_str = entry["date_str"]
         d = datetime.strptime(date_str, "%Y-%m-%d").date().isoformat()
         if d != date_str:
             raise BadDate()
@@ -488,7 +497,17 @@ def url_submission_add_url():
             comment:
               type: string
             new_entry:
-              type: array
+              type: object
+              properties:
+                category_code:
+                  type: string
+                url:
+                  type: string
+                date_str:
+                  type: string
+                notes:
+                  type: integer
+
     responses:
       200:
         description: New URL confirmation
@@ -520,9 +539,9 @@ def url_submission_add_url():
 @cz_blueprint.route("/api/v1/url-submission/update-url", methods=["POST"])
 @role_required(["admin", "user"])
 def url_submission_update_url():
-    """Update a citizenlab URL entry.
-    The current value needs to be sent back as "old_entry" as a check
-    against race conditions
+    """Update a citizenlab URL entry. The current value needs to be sent
+    back as "old_entry" as a check against race conditions. Empty old_entry:
+    create new rule. Empty new_entry: delete existing rule.
     ---
     parameters:
       - in: body
@@ -535,10 +554,32 @@ def url_submission_update_url():
               type: string
             comment:
               type: string
-            new_entry:
-              type: array
             old_entry:
-              type: array
+              type: object
+              properties:
+                category_code:
+                  type: string
+                url:
+                  type: string
+                date_str:
+                  type: string
+                user:
+                  type: string
+                notes:
+                  type: integer
+            new_entry:
+              type: object
+              properties:
+                category_code:
+                  type: string
+                url:
+                  type: string
+                date_str:
+                  type: string
+                user:
+                  type: string
+                notes:
+                  type: integer
     responses:
       200:
         description: New URL confirmation
@@ -553,14 +594,21 @@ def url_submission_update_url():
     username = get_username()
 
     ulm = get_url_list_manager()
-    validate_entry(request.json["new_entry"])
+    rj = request.json
+    new = rj["new_entry"]
+    old = rj["old_entry"]
     try:
+        if new:
+            validate_entry(new)
+        if old:
+            validate_entry(old)
+
         ulm.update(
             username=username,
-            cc=request.json["country_code"],
-            old_entry=request.json["old_entry"],
-            new_entry=request.json["new_entry"],
-            comment=request.json["comment"],
+            cc=rj["country_code"],
+            old_entry=old,
+            new_entry=new,
+            comment=rj["comment"],
         )
         return jsonify({"updated_entry": request.json["new_entry"]})
     except Exception as e:
@@ -701,7 +749,9 @@ def list_url_priorities():
 @cz_blueprint.route("/api/_/url-priorities/update", methods=["POST"])
 @role_required(["admin"])
 def post_update_url_priority():
-    """Add/update/delete an URL priority rule
+    """Add/update/delete an URL priority rule. Empty old_entry: create new rule.
+    Empty new_entry: delete existing rule. The current value needs to be sent
+    back as "old_entry" as a check against race conditions
     ---
     parameters:
       - in: body
@@ -786,8 +836,7 @@ def post_update_url_priority():
 
 
 def match_prio_rule(cz, pr: dict) -> bool:
-    """Match a priority rule to citizenlab entry
-    """
+    """Match a priority rule to citizenlab entry"""
     for k in ["category_code", "cc", "domain", "url"]:
         if pr[k] not in ("*", cz[k]):
             return False

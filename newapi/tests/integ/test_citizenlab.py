@@ -43,28 +43,27 @@ def test_no_auth(client):
 def list_global(client, usersession):
     r = client.get("/api/v1/url-submission/test-list/global")
     assert r.status_code == 200
-    assert set(r.json[0].keys()) == set([
-        "url",
-        "category_code",
-        "category_description",
-        "date_added",
-        "source",
-        "notes",
-    ])
+    assert r.json[0] == {
+        "url": "https://2600.org/",
+        "category_code": "HACK",
+        "category_description": "Hacking Tools",
+        "date_added": "2014-04-15",
+        "source": "citizenlab",
+        "notes": "Updated by OONI on 2017-02-14",
+    }
     assert len(r.json) > 1000
 
 
 def add_url(client, usersession):
     d = dict(
         country_code="US",
-        new_entry=[
-            "https://www.example.com/",
-            "FILE",
-            "File-sharing",
-            "2017-04-12",
-            "",
-            "",
-        ],
+        new_entry={
+            "url": "https://www.example.com/",
+            "category_code": "FILE",
+            "date_added": "2017-04-12",
+            "source": "",
+            "notes": "",
+        },
         comment="add example URL",
     )
 
@@ -75,22 +74,20 @@ def add_url(client, usersession):
 def test_update_url_reject(client, usersession):
     d = dict(
         country_code="it",
-        old_entry=[
-            "http://btdigg.org/",
-            "FILE",
-            "File-sharing",
-            "2017-04-12",
-            "",
-            "<bogus value not matching anything>",
-        ],
-        new_entry=[
-            "https://btdigg.org/",
-            "FILE",
-            "File-sharing",
-            "2017-04-12",
-            "",
-            "Meow",
-        ],
+        old_entry={
+            "url": "http://btdigg.org/",
+            "category_code": "FILE",
+            "date_added": "2017-04-12",
+            "source": "",
+            "notes": "<bogus value not matching anything>",
+        },
+        new_entry={
+            "url": "https://btdigg.org/",
+            "category_code": "FILE",
+            "date_added": "2017-04-12",
+            "source": "",
+            "notes": "Meow",
+        },
         comment="add HTTPS to the website url",
     )
     r = client.post("/api/v1/url-submission/update-url", json=d)
@@ -318,9 +315,9 @@ def test_x(client, adminsession):
     post200(client, "/api/_/url-priorities/update", new_entry=zzz)
 
     ## XXX currently broken
-    #r = client.get("/api/_/url-priorities/WIP")
-    #assert r.json
-    #for e in r.json:
+    # r = client.get("/api/_/url-priorities/WIP")
+    # assert r.json
+    # for e in r.json:
     #    if e["category_code"] == "NEWS" and e["cc"] == "it" and e["url"] == 'http://www.leggo.it/':
     #        assert e["priority"] == 118  # 4 rules matched
 
