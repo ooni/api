@@ -64,10 +64,11 @@ def add_url(client, usersession):
             "source": "",
             "notes": "",
         },
+        old_entry={},
         comment="add example URL",
     )
 
-    r = client.post("/api/v1/url-submission/add-url", json=d)
+    r = client.post("/api/v1/url-submission/update-url", json=d)
     assert r.status_code == 200, r.data
 
 
@@ -98,15 +99,14 @@ def test_update_url_nochange(client, usersession):
     r = client.get("/api/v1/url-submission/test-list/it")
     assert r.status_code == 200
 
-    fe = r.json[0] # first entry
-    old = [
-        fe["url"],
-        fe["category_code"],
-        fe["category_description"],
-        fe["date_added"],
-        fe["source"],
-        fe["notes"],
-    ]
+    fe = r.json[0]  # first entry
+    old = {
+        "url": fe["url"],
+        "category_code": fe["category_code"],
+        "date_added": fe["date_added"],
+        "source": fe["source"],
+        "notes": fe["notes"],
+    }
     new = old
     d = dict(country_code="it", old_entry=old, new_entry=new, comment="")
     r = client.post("/api/v1/url-submission/update-url", json=d)
@@ -120,15 +120,14 @@ def update_url_basic(client, usersession):
     r = client.get("/api/v1/url-submission/test-list/it")
     assert r.status_code == 200
 
-    fe = r.json[0] # first entry
-    old = [
-        fe["url"],
-        fe["category_code"],
-        fe["category_description"],
-        fe["date_added"],
-        fe["source"],
-        fe["notes"],
-    ]
+    fe = r.json[0]  # first entry
+    old = {
+        "url": fe["url"],
+        "category_code": fe["category_code"],
+        "date_added": fe["date_added"],
+        "source": fe["source"],
+        "notes": fe["notes"],
+    }
     new = list(old)
     new[-1] = "Bogus comment"
     assert new != old
@@ -137,6 +136,25 @@ def update_url_basic(client, usersession):
     assert r.status_code == 200, r.data
 
     assert get_state(client) == "IN_PROGRESS"
+
+
+def delete_url(client, usersession):
+    d = dict(
+        country_code="US",
+        old_entry={
+            "url": "https://www.example.com/",
+            "category_code": "FILE",
+            "date_added": "2017-04-12",
+            "source": "",
+            "notes": "",
+        },
+        new_entry={},
+        comment="delete example URL",
+    )
+
+    r = client.post("/api/v1/url-submission/update-url", json=d)
+    assert r.status_code == 200, r.data
+
 
 
 def get_state(client):
