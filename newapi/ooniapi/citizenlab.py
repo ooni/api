@@ -102,7 +102,7 @@ class ProgressPrinter(git.RemoteProgress):
 
 def safe(username: str) -> str:
     """Convert username to a filesystem-safe string"""
-    return sha224("aoeu".encode()).hexdigest()
+    return sha224(username.encode()).hexdigest()
 
 
 class URLListManager:
