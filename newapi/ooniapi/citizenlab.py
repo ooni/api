@@ -283,7 +283,7 @@ class URLListManager:
             self.set_state(username, "IN_PROGRESS")
 
     def update(self, username: str, cc: str, old_entry: dict, new_entry: dict, comment):
-        ks = ("url", "category_code", "category_desc", "date_str", "user", "notes")
+        ks = ("url", "category_code", "category_desc", "date_added", "user", "notes")
         if old_entry:
             old_entry_li = [old_entry[k] for k in ks]
         if new_entry:
@@ -293,7 +293,7 @@ class URLListManager:
         if len(cc) != 2:
             raise Exception("Invalid country code")
 
-        #entry["category_desc"] = CATEGORY_CODES[entry["category_code"]]
+        entry["category_desc"] = CATEGORY_CODES[entry["category_code"]
 
         self.sync_state(username)
         self.pull_origin_repo()
@@ -427,9 +427,9 @@ def validate_entry(entry: Dict[str, str]) -> None:
     if entry["category_code"] not in CATEGORY_CODES:
         raise BadCategoryCode()
     try:
-        date_str = entry["date_str"]
-        d = datetime.strptime(date_str, "%Y-%m-%d").date().isoformat()
-        if d != date_str:
+        date_added = entry["date_added"]
+        d = datetime.strptime(date_added, "%Y-%m-%d").date().isoformat()
+        if d != date_added:
             raise BadDate()
     except Exception:
         raise BadDate()
