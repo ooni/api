@@ -254,45 +254,27 @@ class URLListManager:
 
             self.set_state(username, "CLEAN")
 
-    def add(self, username, cc, new_entry, comment):
-        self.sync_state(username)
-        self.pull_origin_repo()
-        log.debug("adding new entry")
-        state = self.get_state(username)
-        if state in ("PR_OPEN"):
-            raise Exception("You cannot edit files while changes are pending")
-
-        repo = self.get_user_repo(username)
-        with self.get_user_lock(username):
-            csv_f = self.get_user_repo_path(username) / "lists" / f"{cc}.csv"
-
-            if self.is_duplicate_url(username, cc, new_entry[0]):
-                raise Exception(f"{new_entry[0]} is duplicate")
-
-            log.debug(f"Writing {csv_f}")
-            with csv_f.open("a") as out_file:
-                csv_writer = csv.writer(
-                    out_file, quoting=csv.QUOTE_MINIMAL, lineterminator="\n"
-                )
-                csv_writer.writerow(new_entry)
-
-            log.debug(f"Writtten {csv_f}")
-            repo.index.add([csv_f.as_posix()])
-            repo.index.commit(comment)
-
-            self.set_state(username, "IN_PROGRESS")
-
     def update(self, username: str, cc: str, old_entry: dict, new_entry: dict, comment):
+        """Create/update/delete"""
         ks = ("url", "category_code", "date_added", "user", "notes")
+        old_entry_li = new_entry_li = None
         if old_entry:
+            assert sorted(old_entry.keys()) == sorted(ks)
             old_entry_li = [old_entry[k] for k in ks]
             old_entry["category_desc"] = CATEGORY_CODES[old_entry["category_code"]]
 
         if new_entry:
+            assert sorted(new_entry.keys()) == sorted(ks)
             new_entry_li = [new_entry[k] for k in ks]
             new_entry["category_desc"] = CATEGORY_CODES[new_entry["category_code"]]
 
-        log.debug("updating existing entry")
+        if old_entry and new_entry:
+            log.debug("updating existing entry")
+        elif old_entry:
+            log.debug("deleting existing entry")
+        elif new_entry:
+            log.debug("creating new entry")
+
         cc = cc.lower()
         if len(cc) != 2:
             raise Exception("Invalid country code")
@@ -324,19 +306,21 @@ class URLListManager:
                     out_buffer, quoting=csv.QUOTE_MINIMAL, lineterminator="\n"
                 )
 
-                found = False
                 for row in csv_reader:
                     if row == old_entry_li:
-                        found = True
                         if new_entry:
-                            csv_writer.writerow(new_entry)  # update entry
+                            csv_writer.writerow(new_entry_li)  # update entry
                         else:
                             pass  # delete entry
+                        old_entry_li = None  # flag that we are done
 
                     else:
                         csv_writer.writerow(row)
 
-            if not found:
+                if new_entry and not old_entry:
+                    csv_writer.writerow(new_entry_li)  # add new entry at end
+
+            if old_entry_li is not None:
                 m = "Unable to update. The URL list has changed in the meantime."
                 raise Exception(m)
 
@@ -425,9 +409,12 @@ def check_url(url):
 
 
 def validate_entry(entry: Dict[str, str]) -> None:
+    keys = ["category_code", "date_added", "notes", "url", "user"]
+
     check_url(entry["url"])
     if entry["category_code"] not in CATEGORY_CODES:
         raise BadCategoryCode()
+
     try:
         date_added = entry["date_added"]
         d = datetime.strptime(date_added, "%Y-%m-%d").date().isoformat()
@@ -482,72 +469,15 @@ def get_test_list(country_code):
     return make_response(jsonify(tl))
 
 
-@cz_blueprint.route("/api/v1/url-submission/add-url", methods=["POST"])
-@role_required(["admin", "user"])
-def url_submission_add_url():
-    """Submit a new citizenlab URL entry
-    ---
-    parameters:
-      - in: body
-        name: add new URL
-        required: true
-        schema:
-          type: object
-          properties:
-            country_code:
-              type: string
-            comment:
-              type: string
-            new_entry:
-              type: object
-              properties:
-                category_code:
-                  type: string
-                url:
-                  type: string
-                date_added:
-                  type: string
-                notes:
-                  type: integer
-
-    responses:
-      200:
-        description: New URL confirmation
-        schema:
-          type: object
-          properties:
-            new_entry:
-              type: array
-    """
-    global log
-    log = current_app.logger
-    try:
-        username = get_username()
-        ulm = get_url_list_manager()
-        validate_entry(request.json["new_entry"])
-        ulm.add(
-            username=username,
-            cc=request.json["country_code"],
-            new_entry=request.json["new_entry"],
-            comment=request.json["comment"],
-        )
-        d = {"new_entry": request.json["new_entry"]}
-        return make_response(jsonify(d))
-    except Exception as e:
-        log.info(f"URL submission add error {e}", exc_info=1)
-        return jerror(str(e))
-
-
 @cz_blueprint.route("/api/v1/url-submission/update-url", methods=["POST"])
 @role_required(["admin", "user"])
 def url_submission_update_url():
-    """Update a citizenlab URL entry. The current value needs to be sent
-    back as "old_entry" as a check against race conditions. Empty old_entry:
-    create new rule. Empty new_entry: delete existing rule.
+    """Create/update/delete a Citizenlab URL entry. The current value needs
+    to be sent back as "old_entry" as a check against race conditions.
+    Empty old_entry: create new rule. Empty new_entry: delete existing rule.
     ---
     parameters:
       - in: body
-        name: add new URL
         required: true
         schema:
           type: object
