@@ -503,7 +503,7 @@ def url_submission_add_url():
                   type: string
                 url:
                   type: string
-                date_str:
+                date_added:
                   type: string
                 notes:
                   type: integer
@@ -561,7 +561,7 @@ def url_submission_update_url():
                   type: string
                 url:
                   type: string
-                date_str:
+                date_added:
                   type: string
                 user:
                   type: string
@@ -574,7 +574,7 @@ def url_submission_update_url():
                   type: string
                 url:
                   type: string
-                date_str:
+                date_added:
                   type: string
                 user:
                   type: string
