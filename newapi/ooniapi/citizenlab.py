@@ -256,15 +256,15 @@ class URLListManager:
 
     def update(self, username: str, cc: str, old_entry: dict, new_entry: dict, comment):
         """Create/update/delete"""
-        ks = ("url", "category_code", "date_added", "user", "notes")
+        ks = ("url", "category_code", "date_added", "source", "notes")
         old_entry_li = new_entry_li = None
         if old_entry:
-            assert sorted(old_entry.keys()) == sorted(ks)
+            assert sorted(old_entry.keys()) == sorted(ks), "Unexpected keys"
             old_entry_li = [old_entry[k] for k in ks]
             old_entry["category_desc"] = CATEGORY_CODES[old_entry["category_code"]]
 
         if new_entry:
-            assert sorted(new_entry.keys()) == sorted(ks)
+            assert sorted(new_entry.keys()) == sorted(ks), "Unexpected keys"
             new_entry_li = [new_entry[k] for k in ks]
             new_entry["category_desc"] = CATEGORY_CODES[new_entry["category_code"]]
 
@@ -498,7 +498,7 @@ def url_submission_update_url():
                 user:
                   type: string
                 notes:
-                  type: integer
+                  type: string
             new_entry:
               type: object
               properties:
@@ -511,7 +511,7 @@ def url_submission_update_url():
                 user:
                   type: string
                 notes:
-                  type: integer
+                  type: string
     responses:
       200:
         description: New URL confirmation
