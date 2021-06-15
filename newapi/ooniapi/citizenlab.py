@@ -283,17 +283,19 @@ class URLListManager:
             self.set_state(username, "IN_PROGRESS")
 
     def update(self, username: str, cc: str, old_entry: dict, new_entry: dict, comment):
-        ks = ("url", "category_code", "category_desc", "date_added", "user", "notes")
+        ks = ("url", "category_code", "date_added", "user", "notes")
         if old_entry:
             old_entry_li = [old_entry[k] for k in ks]
+            old_entry["category_desc"] = CATEGORY_CODES[old_entry["category_code"]]
+
         if new_entry:
             new_entry_li = [new_entry[k] for k in ks]
+            new_entry["category_desc"] = CATEGORY_CODES[new_entry["category_code"]]
+
         log.debug("updating existing entry")
         cc = cc.lower()
         if len(cc) != 2:
             raise Exception("Invalid country code")
-
-        entry["category_desc"] = CATEGORY_CODES[entry["category_code"]
 
         self.sync_state(username)
         self.pull_origin_repo()
