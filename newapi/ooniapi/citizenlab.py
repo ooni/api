@@ -410,7 +410,7 @@ def check_url(url):
 
 
 def validate_entry(entry: Dict[str, str]) -> None:
-    keys = ["category_code", "date_added", "notes", "url", "user"]
+    # keys = ["category_code", "date_added", "notes", "url", "source"]
 
     check_url(entry["url"])
     if entry["category_code"] not in CATEGORY_CODES:
