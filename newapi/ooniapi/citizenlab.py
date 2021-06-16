@@ -256,6 +256,7 @@ class URLListManager:
 
     def update(self, username: str, cc: str, old_entry: dict, new_entry: dict, comment):
         """Create/update/delete"""
+        # TODO: set date_added to now() on new_entry
         ks = ("url", "category_code", "date_added", "source", "notes")
         old_entry_li = new_entry_li = None
         if old_entry:
@@ -519,7 +520,7 @@ def url_submission_update_url():
           type: object
           properties:
             updated_entry:
-              type: array
+              type: object
     """
     global log
     log = current_app.logger
