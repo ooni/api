@@ -6,9 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 from hashlib import sha224
-from typing import Dict
+from typing import Dict, List
 import csv
-import io
 import logging
 import os
 import re
@@ -22,6 +21,7 @@ import git  # debdeps: python3-git
 import requests
 
 from ooniapi.auth import role_required
+from ooniapi.utils import cachedjson, nocachejson
 
 """
 
@@ -162,13 +162,19 @@ class URLListManager:
         except FileNotFoundError:
             return "CLEAN"
 
+    def get_diff(self, username: str):
+        """Returns the git diff"""
+        # FIXME
+        repo = self.get_user_repo(username)
+        return repo.index.diff()
+
     def set_state(self, username, state: str):
         """
         This will record the current state of the pull request for the user to
         the statefile.
         The absence of a statefile is an indication of a clean state.
         """
-        assert state in ("IN_PROGRESS", "PR_OPEN", "CLEAN")
+        assert state in ("IN_PROGRESS", "PR_OPEN", "CLEAN"), "Unexpected state"
         log.debug(f"setting state for {username} to {state}")
         if state == "CLEAN":
             self.get_user_statefile_path(username).unlink()
@@ -197,7 +203,7 @@ class URLListManager:
         lockfile_f = self.working_dir / "users" / safe(username) / "state.lock"
         return FileLock(lockfile_f, timeout=5)
 
-    def get_test_list(self, username, country_code):
+    def get_test_list(self, username, country_code) -> List[Dict[str, str]]:
         country_code = country_code.lower()
         if len(country_code) != 2 and country_code != "global":
             raise Exception("Invalid country code")
@@ -209,25 +215,25 @@ class URLListManager:
         if not os.path.exists(repo_path):
             repo_path = self.repo_dir
 
-        test_list = []
         path = repo_path / "lists" / f"{country_code}.csv"
         log.debug(f"Reading {path}")
+        keys = set(("url", "category_code", "date_added", "source", "notes"))
+        tl = []
         with path.open() as tl_file:
-            csv_reader = csv.reader(tl_file)
-            for line in csv_reader:
-                test_list.append(line)
-        return test_list
+            reader = csv.DictReader(tl_file)
+            for e in reader:
+                d = {k: (e[k] or "") for k in keys}
+                tl.append(d)
 
-    def is_duplicate_url(self, username, country_code, new_url):
-        url_set = set()
-        for row in self.get_test_list(username, country_code):
-            url = row[0]
-            url_set.add(url)
+        return tl
+
+    def prevent_duplicate_url(self, username, country_code, new_url):
+        rows = self.get_test_list(username, country_code)
         if country_code != "global":
-            for row in self.get_test_list(username, "global"):
-                url = row[0]
-                url_set.add(url)
-        return new_url in url_set
+            rows.extend(self.get_test_list(username, "global"))
+
+        if new_url in (r["url"] for r in rows):
+            raise Exception(f"{new_url} is duplicate")
 
     def pull_origin_repo(self):
         self.repo.remotes.origin.pull(progress=ProgressPrinter())
@@ -257,17 +263,26 @@ class URLListManager:
     def update(self, username: str, cc: str, old_entry: dict, new_entry: dict, comment):
         """Create/update/delete"""
         # TODO: set date_added to now() on new_entry
-        ks = ("url", "category_code", "date_added", "source", "notes")
-        old_entry_li = new_entry_li = None
+        # fields follow the order in the CSV files
+        fields = (
+            "url",
+            "category_code",
+            "category_description",
+            "date_added",
+            "source",
+            "notes",
+        )
         if old_entry:
-            assert sorted(old_entry.keys()) == sorted(ks), "Unexpected keys"
-            old_entry_li = [old_entry[k] for k in ks]
-            old_entry["category_desc"] = CATEGORY_CODES[old_entry["category_code"]]
+            old_entry["category_description"] = CATEGORY_CODES[
+                old_entry["category_code"]
+            ]
+            assert sorted(old_entry.keys()) == sorted(fields), "Unexpected keys"
 
         if new_entry:
-            assert sorted(new_entry.keys()) == sorted(ks), "Unexpected keys"
-            new_entry_li = [new_entry[k] for k in ks]
-            new_entry["category_desc"] = CATEGORY_CODES[new_entry["category_code"]]
+            new_entry["category_description"] = CATEGORY_CODES[
+                new_entry["category_code"]
+            ]
+            assert sorted(new_entry.keys()) == sorted(fields), "Unexpected keys"
 
         if old_entry and new_entry:
             log.debug("updating existing entry")
@@ -291,43 +306,51 @@ class URLListManager:
 
         repo = self.get_user_repo(username)
         with self.get_user_lock(username):
-
             csv_f = self.get_user_repo_path(username) / "lists" / f"{cc}.csv"
+            tmp_f = csv_f.with_suffix(".tmp")
 
-            new_url = new_entry["url"]
-            if new_url != old_entry["url"]:
-                # If the URL is being changed check for collisions
-                if self.is_duplicate_url(username, cc, new_url):
-                    raise Exception(f"{new_url} is duplicate")
+            if new_entry:
+                # Check for collisions:
+                if not old_entry:
+                    self.prevent_duplicate_url(username, cc, new_entry["url"])
 
-            out_buffer = io.StringIO()
-            with csv_f.open() as in_file:
-                csv_reader = csv.reader(in_file)
-                csv_writer = csv.writer(
-                    out_buffer, quoting=csv.QUOTE_MINIMAL, lineterminator="\n"
+                elif old_entry and new_entry["url"] != old_entry["url"]:
+                    # If the URL is being changed check for collisions
+                    self.prevent_duplicate_url(username, cc, new_entry["url"])
+
+            with csv_f.open() as in_f, tmp_f.open("w") as out_f:
+                reader = csv.DictReader(in_f)
+                writer = csv.DictWriter(
+                    out_f,
+                    quoting=csv.QUOTE_MINIMAL,
+                    lineterminator="\n",
+                    fieldnames=fields,
                 )
+                writer.writeheader()
 
-                for row in csv_reader:
-                    if row == old_entry_li:
+                done = False
+                for row in reader:
+                    if row == old_entry:
                         if new_entry:
-                            csv_writer.writerow(new_entry_li)  # update entry
+                            writer.writerow(new_entry)  # update entry
                         else:
                             pass  # delete entry
-                        old_entry_li = None  # flag that we are done
+                        done = True
 
                     else:
-                        csv_writer.writerow(row)
+                        writer.writerow(row)
 
                 if new_entry and not old_entry:
-                    csv_writer.writerow(new_entry_li)  # add new entry at end
+                    writer.writerow(new_entry)  # add new entry at end
+                    done = True
 
-            if old_entry_li is not None:
+            if not done:
                 m = "Unable to update. The URL list has changed in the meantime."
+                tmp_f.unlink()
                 raise Exception(m)
 
-            with csv_f.open("w") as out_file:
-                out_buffer.seek(0)
-                shutil.copyfileobj(out_buffer, out_file)
+            log.debug(f"Writing {csv_f.as_posix()}")
+            tmp_f.rename(csv_f)
             repo.index.add([csv_f.as_posix()])
             repo.index.commit(comment)
 
@@ -369,6 +392,7 @@ class URLListManager:
         )
 
     def propose_changes(self, username: str) -> str:
+        # FIXME: username is not unique to users, switch to account_id
         with self.get_user_lock(username):
             log.debug("proposing changes")
             self.set_state(username, "PR_OPEN")
@@ -410,7 +434,9 @@ def check_url(url):
 
 
 def validate_entry(entry: Dict[str, str]) -> None:
-    # keys = ["category_code", "date_added", "notes", "url", "source"]
+    keys = ["category_code", "date_added", "notes", "source", "url"]
+    if sorted(entry.keys()) != keys:
+        raise Exception(f"Incorrect entry keys {list(entry)}")
 
     check_url(entry["url"])
     if entry["category_code"] not in CATEGORY_CODES:
@@ -464,9 +490,6 @@ def get_test_list(country_code):
     username = get_username()
     ulm = get_url_list_manager()
     tl = ulm.get_test_list(username, country_code)
-    # make an array of dicts
-    header = tl[0]
-    tl = [dict(zip(header, row)) for row in tl[1:]]
     return make_response(jsonify(tl))
 
 
@@ -567,6 +590,26 @@ def get_workflow_state():
     ulm = get_url_list_manager()
     state = ulm.get_state(username)
     return jsonify(state=state)
+
+
+@cz_blueprint.route("/api/v1/url-submission/diff", methods=["GET"])
+@role_required(["admin", "user"])
+def get_git_diff():
+    """Get changes as a git diff
+    ---
+    responses:
+      200:
+        description: Git diff
+        schema:
+          type: object
+    """
+    global log
+    log = current_app.logger
+    username = get_username()
+    log.debug("get citizenlab git diff")
+    ulm = get_url_list_manager()
+    diff = ulm.get_diff(username)
+    return nocachejson(diff=diff)
 
 
 @cz_blueprint.route("/api/v1/url-submission/submit", methods=["POST"])
