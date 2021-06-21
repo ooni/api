@@ -127,11 +127,8 @@ def init_app(app, testmode=False):
         "https://explorer.ooni.org",
         "https://url-prioritization.ooni.org",
     ]
+
     CORS(app, resources={r"*": {"origins": orig}}, supports_credentials=True)
-
-
-def check_config(config):
-    pass
 
 
 def create_app(*args, testmode=False, **kw):
@@ -143,7 +140,6 @@ def create_app(*args, testmode=False, **kw):
 
     # Order matters
     init_app(app, testmode=testmode)
-    check_config(app.config)
 
     # Setup Database connector
     init_db(app)
