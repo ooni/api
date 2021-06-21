@@ -23,10 +23,6 @@ from ooniapi.utils import cachedjson, nocachejson
 # from ooniapi.utils import cachedjson
 
 origins = [
-    "https://explorer-test.ooni.io",
-    "https://explorer-test.ooni.org",
-    "https://explorer.ooni.org",
-    "https://url-prioritization.ooni.org",
     re.compile(r"^https://[-A-Za-z0-9]+\.ooni\.org$"),
     re.compile(r"^https://[-A-Za-z0-9]+\.ooni\.io$"),
 ]

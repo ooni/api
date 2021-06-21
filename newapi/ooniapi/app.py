@@ -1,8 +1,9 @@
 from __future__ import absolute_import
 
-import logging
 import datetime
+import logging
 import os
+import re
 import sys
 
 from flask import Flask, json
@@ -56,7 +57,6 @@ def validate_conf(app, conffile):
     conf_keys = (
         "BASE_URL",
         "COLLECTORS",
-        "CORS_URL",
         "DATABASE_STATEMENT_TIMEOUT",
         "DATABASE_URI_RO",
         "GITHUB_ORIGIN_REPO",
@@ -86,6 +86,15 @@ def validate_conf(app, conffile):
             sys.exit(4)
 
 
+def parse_cors_origins(app):
+    out = []
+    for i in app.config["CORS_URLS"]:
+        if i.startswith("^"):
+            i = re.compile(i)
+        out.append(i)
+    app.config["CORS_URLS"] = out
+
+
 def init_app(app, testmode=False):
     # Load configurations defaults from ooniapi/config.py
     # and then from the file pointed by CONF
@@ -100,6 +109,8 @@ def init_app(app, testmode=False):
     log.info(f"Starting OONI API. Loading conf from {conffile}")
     app.config.from_pyfile(conffile)
     validate_conf(app, conffile)
+    #parse_cors_origins(app)
+    # TODO: fix logging
     log.info("Configuration loaded")
 
     # Prevent messy duplicate logs during testing
