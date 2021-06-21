@@ -119,12 +119,7 @@ def init_app(app, testmode=False):
         # known envs according to Readme.md
         raise RuntimeError("Unexpected APP_ENV", stage)
 
-    # FIXME
-    # CORS(app, resources={r"/api/*": {"origins": "*"}})
-    orig = [
-        app.config["CORS_URL"],
-    ]
-    CORS(app, resources={r"*": {"origins": orig}}, supports_credentials=True)
+    CORS(app)
 
 
 def create_app(*args, testmode=False, **kw):
