@@ -56,6 +56,7 @@ def validate_conf(app, conffile):
     conf_keys = (
         "BASE_URL",
         "COLLECTORS",
+        "CORS_URL",
         "DATABASE_STATEMENT_TIMEOUT",
         "DATABASE_URI_RO",
         "GITHUB_ORIGIN_REPO",
@@ -120,14 +121,9 @@ def init_app(app, testmode=False):
 
     # FIXME
     # CORS(app, resources={r"/api/*": {"origins": "*"}})
-    # TODO: configure from api.conf:
     orig = [
-        "https://explorer-test.ooni.io",
-        "https://explorer-test.ooni.org",
-        "https://explorer.ooni.org",
-        "https://url-prioritization.ooni.org",
+        app.config["CORS_URL"],
     ]
-
     CORS(app, resources={r"*": {"origins": orig}}, supports_credentials=True)
 
 
