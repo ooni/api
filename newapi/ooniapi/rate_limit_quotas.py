@@ -39,14 +39,9 @@ class Limiter:
         unmetered_pages=Optional[List[str]],
     ):
         # Bucket sequence: month, week, day
-        self._ipaddr_limits = [
-            limits.get(l, None)
-            for l in ("ipaddr_per_month", "ipaddr_per_week", "ipaddr_per_day")
-        ]
-        self._token_limits = [
-            limits.get(l, None)
-            for l in ("token_per_month", "token_per_week", "token_per_day")
-        ]
+        labels = ("ipaddr_per_month", "ipaddr_per_week", "ipaddr_per_day")
+        self._ipaddr_limits = [limits.get(x, None) for x in labels]
+        self._token_limits = [limits.get(x, None) for x in labels]
         self._ipaddr_buckets = ({}, {}, {})  # type: IpAddrBuckets
         self._token_buckets = ({}, {}, {})  # type: TokenBuckets
         self._token_check_callback = token_check_callback
