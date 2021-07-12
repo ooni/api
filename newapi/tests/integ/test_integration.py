@@ -134,18 +134,16 @@ def test_redirects_and_rate_limit_for_explorer(client):
     assert "X-RateLimit-Remaining" not in resp.headers
 
 
-@pytest.mark.skip(reason="broken")
 def test_redirects_and_rate_limit_spin(client):
     # Simulate a forwarded client with a different ipaddr
     # In production the API sits behind Nginx
     limit = 4000
     headers = {"X-Real-IP": "1.2.3.4"}
-    t1 = time.monotonic() + 0.2
-    while time.monotonic() < t1:
+    end_time = time.monotonic() + 1.1
+    while time.monotonic() < end_time:
         resp = client.get("/stats", headers=headers)
-    delta = time.monotonic() - t1
-    assert 0 < delta < 0.3
-    assert 0 < limit - float(resp.headers["X-RateLimit-Remaining"]) < 0.3
+    assert abs(time.monotonic() - end_time) < 0.2
+    assert int(resp.headers["X-RateLimit-Remaining"]) == limit - 2
 
 
 def test_redirects_and_rate_limit_summary(client):
