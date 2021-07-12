@@ -108,8 +108,7 @@ class Limiter:
     def consume_quota(
         self, elapsed: float, ipaddr: Optional[IpAddress] = None, token=None
     ) -> None:
-        """Consume quota in seconds
-        """
+        """Consume quota in seconds"""
         assert ipaddr or token
         if ipaddr:
             # TODO handle IPv6?
@@ -131,8 +130,7 @@ class Limiter:
             raise NotImplementedError()
 
     def is_quota_available(self, ipaddr=None, token=None) -> bool:
-        """Check if all quota buckets for an ipaddr/token are > 0
-        """
+        """Check if all quota buckets for an ipaddr/token are > 0"""
         # return False if any bucket reached 0
         for bucket in self._ipaddr_buckets:
             if ipaddr in bucket:
@@ -154,8 +152,7 @@ class Limiter:
         return False
 
     def get_lowest_daily_quotas_summary(self, n=20) -> List[Tuple[int, float]]:
-        """Returns a summary of daily quotas with the lowest values
-        """
+        """Returns a summary of daily quotas with the lowest values"""
         li = sorted((val, ipa) for ipa, val in self._ipaddr_buckets[2].items())
         li = li[:n]
         return [(int(ipa.packed[0]), val) for val, ipa in li]
@@ -208,8 +205,7 @@ class FlaskLimiter:
         self._request_start_time = time.monotonic()
 
     def _after_request_callback(self, response):
-        """Consume quota and injects HTTP headers when responding to a request
-        """
+        """Consume quota and injects HTTP headers when responding to a request"""
         log = current_app.logger
         try:
             ipaddr = self._get_client_ipaddr()
@@ -240,8 +236,7 @@ class FlaskLimiter:
         whitelisted_ipaddrs=None,
         unmetered_pages=None,
     ):
-        """
-        """
+        """"""
         self._limiter = Limiter(
             limits,
             token_check_callback=token_check_callback,
