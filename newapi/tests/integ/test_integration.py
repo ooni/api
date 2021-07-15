@@ -40,11 +40,6 @@ def log(app):
     return app.logger
 
 
-@pytest.fixture(autouse=True, scope="session")
-def setup_database_url():
-    os.environ["DATABASE_URL"] = "postgresql://readonly@localhost:5432/metadb"
-
-
 @pytest.fixture()
 def fastpath_dup_rid_input(app):
     """
