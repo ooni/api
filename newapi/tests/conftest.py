@@ -106,7 +106,8 @@ def checkout_pipeline(tmpdir_factory):
     d = tmpdir_factory.mktemp("pipeline")
     if d.isdir():
         shutil.rmtree(d)
-    cmd = f"git clone --depth 1 https://github.com/ooni/pipeline -q {d}"
+    # cmd = f"git clone --depth 1 https://github.com/ooni/pipeline -q {d}"
+    cmd = f"git clone --depth 1 https://github.com/ooni/pipeline --branch stop-after -q {d}"
     print(cmd)
     cmd = cmd.split()
     subprocess.run(cmd, check=True, stdout=PIPE, stderr=PIPE).stdout
@@ -154,9 +155,11 @@ def run_fastpath(log, pipeline_dir, dburi):
         "--db-uri",
         dburi,
         "--start-day",
-        "2021-07-13",
+        "2021-07-9",
         "--end-day",
-        "2021-07-14",
+        "2021-07-10",
+        "--stop-after",
+        "10000",
     ]
     log.info("Running fastpath")
     log.info(cmd)
@@ -178,3 +181,11 @@ def setup_database_part_2(setup_database_part_1, app, checkout_pipeline):
     log = app.logger
     run_sql_scripts(app)
     run_fastpath(log, checkout_pipeline, dburi)
+
+
+# # Fixtures used by test files # #
+
+
+@pytest.fixture()
+def log(app):
+    return app.logger
