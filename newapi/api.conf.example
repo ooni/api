@@ -4,7 +4,9 @@
 COLLECTORS = []
 
 # Read-only database access
-DATABASE_URI_RO = "postgresql://readonly:ooni@db/metadb"
+#DATABASE_URI_RO = "postgresql://readonly:ooni@db/metadb"
+# FIXME
+DATABASE_URI_RO = "postgresql://oonitest:test@db/oonitestdb"
 
 DATABASE_STATEMENT_TIMEOUT = 30
 BASE_URL = "https://api.ooni.io/"
