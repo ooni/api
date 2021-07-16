@@ -55,6 +55,7 @@ def init_db(app):
         "options": f"-c statement_timeout={query_timeout}",
     }
     uri = app.config["DATABASE_URI_RO"]
+    app.logger.info(f"Database URI: {uri}")
     app.db_engine = create_engine(uri, convert_unicode=True, connect_args=connargs)
     app.db_session = scoped_session(
         sessionmaker(autocommit=False, autoflush=False, bind=app.db_engine)
