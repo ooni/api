@@ -112,9 +112,8 @@ class URLListManager:
         self.repo = self.init_repo()
 
     def init_repo(self):
-        log.debug("initializing repo")
         if not os.path.exists(self.repo_dir):
-            log.debug("cloning repo")
+            log.info(f"cloning {self.origin_repo} repository")
             url = f"https://github.com/{self.origin_repo}.git"
             repo = git.Repo.clone_from(url, self.repo_dir, branch="master")
             url = f"https://{self.github_user}:{self.github_token}@github.com/{self.push_repo}.git"
