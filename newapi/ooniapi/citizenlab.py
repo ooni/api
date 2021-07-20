@@ -285,7 +285,7 @@ class URLListManager:
             log.debug("creating new entry")
 
         cc = cc.lower()
-        if len(cc) != 2:
+        if len(cc) != 2 and cc != "global":
             raise Exception("Invalid country code")
 
         self.sync_state(account_id)
