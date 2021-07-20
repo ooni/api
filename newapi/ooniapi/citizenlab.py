@@ -224,14 +224,13 @@ class URLListManager:
         except FileNotFoundError:
             raise CountryNotSupported()
 
-
     def prevent_duplicate_url(self, account_id, country_code, new_url):
         rows = self.get_test_list(account_id, country_code)
         if country_code != "global":
             rows.extend(self.get_test_list(account_id, "global"))
 
         if new_url in (r["url"] for r in rows):
-            raise Exception(f"{new_url} is duplicate")
+            raise DuplicateURLError(f"{new_url} is duplicate")
 
     def pull_origin_repo(self):
         self.repo.remotes.origin.pull(progress=ProgressPrinter())
@@ -258,7 +257,9 @@ class URLListManager:
 
             self.set_state(account_id, "CLEAN")
 
-    def update(self, account_id: str, cc: str, old_entry: dict, new_entry: dict, comment):
+    def update(
+        self, account_id: str, cc: str, old_entry: dict, new_entry: dict, comment
+    ):
         """Create/update/delete"""
         # TODO: set date_added to now() on new_entry
         # fields follow the order in the CSV files
@@ -400,6 +401,10 @@ class URLListManager:
             return pr_id
 
 
+class DuplicateURLError(Exception):
+    pass
+
+
 class BadURL(HTTPException):
     code = 400
     description = "Invalid URL"
@@ -418,6 +423,7 @@ class BadCategoryDescription(HTTPException):
 class BadDate(HTTPException):
     code = 400
     description = "Invalid date"
+
 
 class CountryNotSupported(HTTPException):
     code = 400
@@ -572,6 +578,8 @@ def url_submission_update_url():
             comment=rj["comment"],
         )
         return jsonify({"updated_entry": request.json["new_entry"]})
+    except DuplicateURLError as e:
+        return jerror(str(e))
     except Exception as e:
         log.info(f"URL submission update error {e}", exc_info=1)
         return jerror(str(e))
