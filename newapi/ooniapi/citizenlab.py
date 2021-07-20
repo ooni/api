@@ -5,7 +5,6 @@ Citizenlab CRUD API
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
-from hashlib import sha224
 from typing import Dict, List
 import csv
 import logging
@@ -21,7 +20,7 @@ import git  # debdeps: python3-git
 import requests
 
 from ooniapi.auth import role_required
-from ooniapi.utils import cachedjson, nocachejson
+from ooniapi.utils import nocachejson
 
 """
 
@@ -31,7 +30,7 @@ It contains rules on category_code, cc, domain and url to assign priorities.
 Values can be wildcards "*". A citizenlab entry can match multiple rules.
 """
 
-# TODO: add per-user locking
+# NOTE: usernames are not trusted and not unique. Use account_id instead
 
 log = logging.getLogger()  # overridden by current_app.logger
 
@@ -100,11 +99,6 @@ class ProgressPrinter(git.RemoteProgress):
         )
 
 
-def safe(username: str) -> str:
-    """Convert username to a filesystem-safe string"""
-    return sha224(username.encode()).hexdigest()
-
-
 class URLListManager:
     def __init__(self, working_dir, github_token, push_repo, origin_repo):
         self.working_dir = working_dir
@@ -129,20 +123,19 @@ class URLListManager:
         repo.remotes.origin.pull(progress=ProgressPrinter())
         return repo
 
-    def get_user_repo_path(self, username) -> Path:
-        return self.working_dir / "users" / safe(username) / "test-lists"
+    def get_user_repo_path(self, account_id) -> Path:
+        return self.working_dir / "users" / account_id / "test-lists"
 
-    def get_user_statefile_path(self, username) -> Path:
-        return self.working_dir / "users" / safe(username) / "state"
+    def get_user_statefile_path(self, account_id) -> Path:
+        return self.working_dir / "users" / account_id / "state"
 
-    def get_user_pr_path(self, username) -> Path:
-        return self.working_dir / "users" / safe(username) / "pr_id"
+    def get_user_pr_path(self, account_id) -> Path:
+        return self.working_dir / "users" / account_id / "pr_id"
 
-    def get_user_branchname(self, username: str) -> str:
-        # FIXME: username is not trusted
-        return f"user-contribution/{username}"
+    def get_user_branchname(self, account_id: str) -> str:
+        return f"user-contribution/{account_id}"
 
-    def get_state(self, username: str):
+    def get_state(self, account_id: str):
         """
         Returns the current state of the repo for the given user.
 
@@ -158,60 +151,60 @@ class URLListManager:
             being merged
         """
         try:
-            return self.get_user_statefile_path(username).read_text()
+            return self.get_user_statefile_path(account_id).read_text()
         except FileNotFoundError:
             return "CLEAN"
 
-    def get_diff(self, username: str):
+    def get_diff(self, account_id: str):
         """Returns the git diff"""
         # FIXME
-        repo = self.get_user_repo(username)
+        repo = self.get_user_repo(account_id)
         return repo.index.diff()
 
-    def set_state(self, username, state: str):
+    def set_state(self, account_id, state: str):
         """
         This will record the current state of the pull request for the user to
         the statefile.
         The absence of a statefile is an indication of a clean state.
         """
         assert state in ("IN_PROGRESS", "PR_OPEN", "CLEAN"), "Unexpected state"
-        log.debug(f"setting state for {username} to {state}")
+        log.debug(f"setting state for {account_id} to {state}")
         if state == "CLEAN":
-            self.get_user_statefile_path(username).unlink()
-            self.get_user_pr_path(username).unlink()
+            self.get_user_statefile_path(account_id).unlink()
+            self.get_user_pr_path(account_id).unlink()
             return
 
-        with open(self.get_user_statefile_path(username), "w") as out_file:
+        with open(self.get_user_statefile_path(account_id), "w") as out_file:
             out_file.write(state)
 
-    def set_pr_id(self, username: str, pr_id):
-        self.get_user_pr_path(username).write_text(pr_id)
+    def set_pr_id(self, account_id: str, pr_id):
+        self.get_user_pr_path(account_id).write_text(pr_id)
 
-    def get_pr_id(self, username: str):
-        return self.get_user_pr_path(username).read_text()
+    def get_pr_id(self, account_id: str):
+        return self.get_user_pr_path(account_id).read_text()
 
-    def get_user_repo(self, username: str):
-        repo_path = self.get_user_repo_path(username)
+    def get_user_repo(self, account_id: str):
+        repo_path = self.get_user_repo_path(account_id)
         if not os.path.exists(repo_path):
             log.info(f"creating {repo_path}")
             self.repo.git.worktree(
-                "add", "-b", self.get_user_branchname(username), repo_path
+                "add", "-b", self.get_user_branchname(account_id), repo_path
             )
         return git.Repo(repo_path)
 
-    def get_user_lock(self, username: str):
-        lockfile_f = self.working_dir / "users" / safe(username) / "state.lock"
+    def get_user_lock(self, account_id: str):
+        lockfile_f = self.working_dir / "users" / account_id / "state.lock"
         return FileLock(lockfile_f, timeout=5)
 
-    def get_test_list(self, username, country_code) -> List[Dict[str, str]]:
+    def get_test_list(self, account_id, country_code) -> List[Dict[str, str]]:
         country_code = country_code.lower()
         if len(country_code) != 2 and country_code != "global":
             raise Exception("Invalid country code")
 
-        self.sync_state(username)
+        self.sync_state(account_id)
         self.pull_origin_repo()
 
-        repo_path = self.get_user_repo_path(username)
+        repo_path = self.get_user_repo_path(account_id)
         if not os.path.exists(repo_path):
             repo_path = self.repo_dir
 
@@ -227,10 +220,10 @@ class URLListManager:
 
         return tl
 
-    def prevent_duplicate_url(self, username, country_code, new_url):
-        rows = self.get_test_list(username, country_code)
+    def prevent_duplicate_url(self, account_id, country_code, new_url):
+        rows = self.get_test_list(account_id, country_code)
         if country_code != "global":
-            rows.extend(self.get_test_list(username, "global"))
+            rows.extend(self.get_test_list(account_id, "global"))
 
         if new_url in (r["url"] for r in rows):
             raise Exception(f"{new_url} is duplicate")
@@ -238,17 +231,17 @@ class URLListManager:
     def pull_origin_repo(self):
         self.repo.remotes.origin.pull(progress=ProgressPrinter())
 
-    def sync_state(self, username):
-        state = self.get_state(username)
+    def sync_state(self, account_id):
+        state = self.get_state(account_id)
 
         # If the state is CLEAN or IN_PROGRESS we don't have to do anything
         if state == "CLEAN":
             return
         if state == "IN_PROGRESS":
             return
-        if self.is_pr_resolved(username):
-            path = self.get_user_repo_path(username)
-            bname = self.get_user_branchname(username)
+        if self.is_pr_resolved(account_id):
+            path = self.get_user_repo_path(account_id)
+            bname = self.get_user_branchname(account_id)
             log.debug(f"Deleting {path}")
             try:
                 # TODO: investigate
@@ -258,9 +251,9 @@ class URLListManager:
             except Exception as e:
                 log.info(f"Error deleting {path} {e}")
 
-            self.set_state(username, "CLEAN")
+            self.set_state(account_id, "CLEAN")
 
-    def update(self, username: str, cc: str, old_entry: dict, new_entry: dict, comment):
+    def update(self, account_id: str, cc: str, old_entry: dict, new_entry: dict, comment):
         """Create/update/delete"""
         # TODO: set date_added to now() on new_entry
         # fields follow the order in the CSV files
@@ -295,28 +288,28 @@ class URLListManager:
         if len(cc) != 2:
             raise Exception("Invalid country code")
 
-        self.sync_state(username)
+        self.sync_state(account_id)
         self.pull_origin_repo()
-        state = self.get_state(username)
+        state = self.get_state(account_id)
         if state in ("PR_OPEN"):
             raise Exception("Your changes are being reviewed. Please wait.")
 
         if old_entry == new_entry:
             raise Exception("No change is being made.")
 
-        repo = self.get_user_repo(username)
-        with self.get_user_lock(username):
-            csv_f = self.get_user_repo_path(username) / "lists" / f"{cc}.csv"
+        repo = self.get_user_repo(account_id)
+        with self.get_user_lock(account_id):
+            csv_f = self.get_user_repo_path(account_id) / "lists" / f"{cc}.csv"
             tmp_f = csv_f.with_suffix(".tmp")
 
             if new_entry:
                 # Check for collisions:
                 if not old_entry:
-                    self.prevent_duplicate_url(username, cc, new_entry["url"])
+                    self.prevent_duplicate_url(account_id, cc, new_entry["url"])
 
                 elif old_entry and new_entry["url"] != old_entry["url"]:
                     # If the URL is being changed check for collisions
-                    self.prevent_duplicate_url(username, cc, new_entry["url"])
+                    self.prevent_duplicate_url(account_id, cc, new_entry["url"])
 
             with csv_f.open() as in_f, tmp_f.open("w") as out_f:
                 reader = csv.DictReader(in_f)
@@ -354,7 +347,7 @@ class URLListManager:
             repo.index.add([csv_f.as_posix()])
             repo.index.commit(comment)
 
-            self.set_state(username, "IN_PROGRESS")
+            self.set_state(account_id, "IN_PROGRESS")
 
     def open_pr(self, branchname):
         head = f"{self.github_user}:{branchname}"
@@ -373,8 +366,8 @@ class URLListManager:
         # log.debug(j)
         return j["url"]
 
-    def is_pr_resolved(self, username):
-        pr_id = self.get_pr_id(username)
+    def is_pr_resolved(self, account_id):
+        pr_id = self.get_pr_id(account_id)
         assert pr_id.startswith("https"), f"{pr_id} doesn't start with https"
         log.debug(f"Fetching PR {pr_id}")
         auth = HTTPBasicAuth(self.github_user, self.github_token)
@@ -383,22 +376,21 @@ class URLListManager:
         assert "state" in j
         return j["state"] != "open"
 
-    def push_to_repo(self, username):
+    def push_to_repo(self, account_id):
         log.debug("pushing branch to GitHub")
         self.repo.remotes.rworigin.push(
-            self.get_user_branchname(username),
+            self.get_user_branchname(account_id),
             progress=ProgressPrinter(),
             force=True,
         )
 
-    def propose_changes(self, username: str) -> str:
-        # FIXME: username is not unique to users, switch to account_id
-        with self.get_user_lock(username):
+    def propose_changes(self, account_id: str) -> str:
+        with self.get_user_lock(account_id):
             log.debug("proposing changes")
-            self.set_state(username, "PR_OPEN")
-            self.push_to_repo(username)
-            pr_id = self.open_pr(self.get_user_branchname(username))
-            self.set_pr_id(username, pr_id)
+            self.set_state(account_id, "PR_OPEN")
+            self.push_to_repo(account_id)
+            pr_id = self.open_pr(self.get_user_branchname(account_id))
+            self.set_pr_id(account_id, pr_id)
             return pr_id
 
 
@@ -451,7 +443,7 @@ def validate_entry(entry: Dict[str, str]) -> None:
         raise BadDate()
 
 
-def get_username():
+def get_account_id():
     return request._user_nickname
 
 
@@ -487,9 +479,9 @@ def get_test_list(country_code):
     """
     global log
     log = current_app.logger
-    username = get_username()
+    account_id = get_account_id()
     ulm = get_url_list_manager()
-    tl = ulm.get_test_list(username, country_code)
+    tl = ulm.get_test_list(account_id, country_code)
     return make_response(jsonify(tl))
 
 
@@ -547,7 +539,7 @@ def url_submission_update_url():
     """
     global log
     log = current_app.logger
-    username = get_username()
+    account_id = get_account_id()
 
     ulm = get_url_list_manager()
     rj = request.json
@@ -560,7 +552,7 @@ def url_submission_update_url():
             validate_entry(old)
 
         ulm.update(
-            username=username,
+            account_id=account_id,
             cc=rj["country_code"],
             old_entry=old,
             new_entry=new,
@@ -585,10 +577,10 @@ def get_workflow_state():
     """
     global log
     log = current_app.logger
-    username = get_username()
+    account_id = get_account_id()
     log.debug("get citizenlab workflow state")
     ulm = get_url_list_manager()
-    state = ulm.get_state(username)
+    state = ulm.get_state(account_id)
     return jsonify(state=state)
 
 
@@ -605,10 +597,10 @@ def get_git_diff():
     """
     global log
     log = current_app.logger
-    username = get_username()
+    account_id = get_account_id()
     log.debug("get citizenlab git diff")
     ulm = get_url_list_manager()
-    diff = ulm.get_diff(username)
+    diff = ulm.get_diff(account_id)
     return nocachejson(diff=diff)
 
 
@@ -625,9 +617,9 @@ def post_propose_changes():
     global log
     log = current_app.logger
     log.info("submitting citizenlab changes")
-    username = get_username()
+    account_id = get_account_id()
     ulm = get_url_list_manager()
-    pr_id = ulm.propose_changes(username)
+    pr_id = ulm.propose_changes(account_id)
     return jsonify(pr_id=pr_id)
 
 
