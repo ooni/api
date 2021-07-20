@@ -213,13 +213,17 @@ class URLListManager:
         log.debug(f"Reading {path}")
         keys = set(("url", "category_code", "date_added", "source", "notes"))
         tl = []
-        with path.open() as tl_file:
-            reader = csv.DictReader(tl_file)
-            for e in reader:
-                d = {k: (e[k] or "") for k in keys}
-                tl.append(d)
+        try:
+            with path.open() as tl_file:
+                reader = csv.DictReader(tl_file)
+                for e in reader:
+                    d = {k: (e[k] or "") for k in keys}
+                    tl.append(d)
 
-        return tl
+            return tl
+        except FileNotFoundError:
+            raise CountryNotSupported()
+
 
     def prevent_duplicate_url(self, account_id, country_code, new_url):
         rows = self.get_test_list(account_id, country_code)
@@ -415,6 +419,10 @@ class BadDate(HTTPException):
     code = 400
     description = "Invalid date"
 
+class CountryNotSupported(HTTPException):
+    code = 400
+    description = "Country Not Supported"
+
 
 def check_url(url):
     if not VALID_URL.match(url):
@@ -483,8 +491,11 @@ def get_test_list(country_code):
     log = current_app.logger
     account_id = get_account_id()
     ulm = get_url_list_manager()
-    tl = ulm.get_test_list(account_id, country_code)
-    return make_response(jsonify(tl))
+    try:
+        tl = ulm.get_test_list(account_id, country_code)
+        return make_response(jsonify(tl))
+    except CountryNotSupported:
+        return jerror("Country not supported")
 
 
 @cz_blueprint.route("/api/v1/url-submission/update-url", methods=["POST"])
