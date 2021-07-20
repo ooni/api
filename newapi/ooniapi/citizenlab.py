@@ -181,6 +181,7 @@ class URLListManager:
         self.get_user_pr_path(account_id).write_text(pr_id)
 
     def get_pr_id(self, account_id: str):
+        """Raise if the PR was never opened"""
         return self.get_user_pr_path(account_id).read_text()
 
     def get_user_repo(self, account_id: str):
@@ -366,7 +367,8 @@ class URLListManager:
         # log.debug(j)
         return j["url"]
 
-    def is_pr_resolved(self, account_id):
+    def is_pr_resolved(self, account_id) -> bool:
+        """Raises if the PR was never opened"""
         pr_id = self.get_pr_id(account_id)
         assert pr_id.startswith("https"), f"{pr_id} doesn't start with https"
         log.debug(f"Fetching PR {pr_id}")
@@ -581,6 +583,9 @@ def get_workflow_state():
     log.debug("get citizenlab workflow state")
     ulm = get_url_list_manager()
     state = ulm.get_state(account_id)
+    if state in ("PR_OPEN"):
+        pr_id = ulm.get_pr_id(account_id)
+        return jsonify(state=state, pr_id=pr_id)
     return jsonify(state=state)
 
 
