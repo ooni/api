@@ -446,7 +446,7 @@ def validate_entry(entry: Dict[str, str]) -> None:
 
 
 def get_account_id():
-    return request._user_nickname
+    return request._account_id
 
 
 def get_url_list_manager():
