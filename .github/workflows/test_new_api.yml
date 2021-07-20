@@ -32,4 +32,5 @@ jobs:
               tests/integ/test_aggregation.py \
               tests/integ/test_citizenlab.py
       - name: debug docker
+        if: always()
         run: docker logs api_db_1
