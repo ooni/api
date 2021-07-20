@@ -31,3 +31,5 @@ jobs:
               tests/integ/test_integration_auth.py \
               tests/integ/test_aggregation.py \
               tests/integ/test_citizenlab.py
+      - name: debug docker
+        run: docker logs api_db_1
