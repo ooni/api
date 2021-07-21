@@ -30,8 +30,6 @@ It contains rules on category_code, cc, domain and url to assign priorities.
 Values can be wildcards "*". A citizenlab entry can match multiple rules.
 """
 
-# NOTE: usernames are not trusted and not unique. Use account_id instead
-
 log = logging.getLogger()  # overridden by current_app.logger
 
 cz_blueprint = Blueprint("citizenlab_api", "citizenlab")
