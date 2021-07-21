@@ -102,11 +102,10 @@ class ProgressPrinter(git.RemoteProgress):
 class URLListManager:
     def __init__(self, working_dir, github_token, push_repo, origin_repo):
         self.working_dir = working_dir
+        self.origin_repo = origin_repo
         self.push_repo = push_repo
         self.github_user = push_repo.split("/")[0]
         self.github_token = github_token
-
-        self.origin_repo = origin_repo
         self.repo_dir = self.working_dir / "test-lists"
 
         self.repo = self.init_repo()
@@ -180,8 +179,19 @@ class URLListManager:
         self.get_user_pr_path(account_id).write_text(pr_id)
 
     def get_pr_id(self, account_id: str):
-        """Raise if the PR was never opened"""
+        """Returns an API URL e.g.
+        https://api.github.com/repos/citizenlab/test-lists/pulls/800
+        Raises if the PR was never opened
+        """
         return self.get_user_pr_path(account_id).read_text()
+
+    def get_pr_url(self, account_id: str):
+        """Returns a browsable URL
+        Raises if the PR was never opened
+        """
+        apiurl = self.get_pr_id(account_id)
+        pr_num = apiurl.split("/")[-1]
+        return f"https://github.com/{self.push_repo}/pull/{pr_num}"
 
     def get_user_repo(self, account_id: str):
         repo_path = self.get_user_repo_path(account_id)
@@ -355,11 +365,15 @@ class URLListManager:
             self.set_state(account_id, "IN_PROGRESS")
 
     def open_pr(self, branchname):
+        """Opens PR. Returns API URL e.g.
+        https://api.github.com/repos/citizenlab/test-lists/pulls/800
+        """
         head = f"{self.github_user}:{branchname}"
-        log.debug(f"opening a PR for {head}")
+        log.info(f"opening a PR for {head} on {self.push_repo}")
         auth = HTTPBasicAuth(self.github_user, self.github_token)
+        apiurl = f"https://api.github.com/repos/{self.push_repo}/pulls"
         r = requests.post(
-            f"https://api.github.com/repos/{self.origin_repo}/pulls",
+            apiurl,
             auth=auth,
             json={
                 "head": head,
@@ -368,7 +382,6 @@ class URLListManager:
             },
         )
         j = r.json()
-        # log.debug(j)
         return j["url"]
 
     def is_pr_resolved(self, account_id) -> bool:
@@ -602,8 +615,8 @@ def get_workflow_state():
     ulm = get_url_list_manager()
     state = ulm.get_state(account_id)
     if state in ("PR_OPEN"):
-        pr_id = ulm.get_pr_id(account_id)
-        return jsonify(state=state, pr_id=pr_id)
+        pr_url = ulm.get_pr_url(account_id)
+        return jsonify(state=state, pr_url=pr_url)
     return jsonify(state=state)
 
 
