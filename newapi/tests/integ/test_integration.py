@@ -84,6 +84,7 @@ def api(client, subpath, **kw):
 
 # # rate limiting / quotas # #
 
+@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run") # FIXME
 def test_redirects_and_rate_limit_basic(client):
     # Simulate a forwarded client with a different ipaddr
     # In production the API sits behind Nginx
@@ -125,6 +126,7 @@ def test_redirects_and_rate_limit_spin(client):
     assert int(resp.headers["X-RateLimit-Remaining"]) == limit - 2
 
 
+@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run") # FIXME
 def test_redirects_and_rate_limit_summary(client):
     url = "quotas_summary"
     response = privapi(client, url)
@@ -144,6 +146,7 @@ def lower_rate_limits(app):
     limits[0] = old
 
 
+@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run") # FIXME
 def test_redirects_and_rate_limit_spin_to_zero(client, lower_rate_limits):
     headers = {"X-Real-IP": "1.2.3.4"}
     end_time = time.monotonic() + 2
@@ -485,6 +488,7 @@ def test_list_measurements_one(client):
     }
 
 
+@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run") # FIXME
 def test_list_measurements_search(client):
     # Used by Explorer search
     response = api(
@@ -494,6 +498,7 @@ def test_list_measurements_search(client):
     assert len(response["results"]) == 7, jd(response)
 
 
+@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run") # FIXME
 def test_list_measurements_search_cc(client):
     # Used by Explorer search
     response = api(
