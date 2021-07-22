@@ -698,6 +698,8 @@ def test_list_measurements_filter_flags_pipeline(
     assert len(response["results"]) == cnt
 
 
+# FIXME: glitchy on GH CI
+@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run")
 def test_list_measurements_probe_asn(client):
     p = "measurements?probe_asn=AS5089&since=2019-12-8&until=2021-12-11&limit=50"
     response = api(client, p)
