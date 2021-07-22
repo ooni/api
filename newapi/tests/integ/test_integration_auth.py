@@ -219,7 +219,6 @@ def decode_token(client):
     return tok
 
 
-@pytest.mark.skip(reason="Broken on GH CI")
 def test_session_refresh_and_expire(client, mocksmtp, integtest_admin):
     # Using:
     # SESSION_EXPIRY_DAYS = 2
