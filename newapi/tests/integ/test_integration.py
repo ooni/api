@@ -170,7 +170,6 @@ def test_redirects_and_rate_limit_spin_to_zero(client, lower_rate_limits):
     while time.monotonic() < end_time:
         resp = client.get("/_/test_names", headers=headers)
         if resp.status_code == 429:
-            assert 0, "test"
             return  # we reached the limit
 
     assert 0, "429 was never received"
