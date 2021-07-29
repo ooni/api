@@ -17,6 +17,7 @@ TEST_GROUPS = {
         "tcp_connect",
         "psiphon",
         "tor",
+        "torsf",
         "riseupvpn",
     ],
     "legacy": [
