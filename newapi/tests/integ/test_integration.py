@@ -24,7 +24,6 @@ from ooniapi.measurements import FASTPATH_MSM_ID_PREFIX
 # The flask app is created in tests/conftest.py
 
 
-
 @pytest.fixture()
 def fastpath_dup_rid_input(app):
     """
@@ -82,9 +81,21 @@ def api(client, subpath, **kw):
     return response.json
 
 
+def api_expect_status(client, status_code, subpath, **kw):
+    url = f"/api/v1/{subpath}"
+    if kw:
+        assert "?" not in url
+        url += "?" + urlencode(kw)
+
+    response = client.get(url)
+    assert response.status_code == status_code
+    return response
+
+
 # # rate limiting / quotas # #
 
-@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run") # FIXME
+
+@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run")  # FIXME
 def test_redirects_and_rate_limit_basic(client):
     # Simulate a forwarded client with a different ipaddr
     # In production the API sits behind Nginx
@@ -126,7 +137,7 @@ def test_redirects_and_rate_limit_spin(client):
     assert int(resp.headers["X-RateLimit-Remaining"]) == limit - 2
 
 
-@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run") # FIXME
+@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run")  # FIXME
 def test_redirects_and_rate_limit_summary(client):
     url = "quotas_summary"
     response = privapi(client, url)
@@ -146,7 +157,7 @@ def lower_rate_limits(app):
     limits[0] = old
 
 
-@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run") # FIXME
+@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run")  # FIXME
 def test_redirects_and_rate_limit_spin_to_zero(client, lower_rate_limits):
     headers = {"X-Real-IP": "1.2.3.4"}
     end_time = time.monotonic() + 2
@@ -449,6 +460,8 @@ def test_get_measurement_meta_full_reprocessed(client):
     assert "test_keys" in data
 
 
+# # get_raw_measurement # #
+
 # https://explorer.ooni.org/measurement/20210622T144545Z_riseupvpn_MM_133384_n1_VJkB5EObudGDpy9Y
 @pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run")
 def test_get_raw_measurement_input_null_bug(client):
@@ -456,6 +469,17 @@ def test_get_raw_measurement_input_null_bug(client):
     rid = "20210622T144545Z_riseupvpn_MM_133384_n1_VJkB5EObudGDpy9Y"
     r = api(client, f"raw_measurement?report_id={rid}")
     assert "test_keys" in r
+
+
+def test_get_raw_measurement_by_msmt_uid_bogus(client):
+    uid = "BOGUS"
+    r = api_expect_status(client, 500, "raw_measurement", measurement_uid=uid)
+
+
+@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run")
+def test_get_raw_measurement_by_msmt_uid(client):
+    uid = "20201216054344.884408_VE_webconnectivity_a255255d74fff0be"
+    r = api(client, "raw_measurement", measurement_uid=uid)
 
 
 # # list_measurements # #
@@ -473,7 +497,8 @@ def test_list_measurements_one(client):
         "failure": False,
         "input": inp,
         "measurement_start_time": "2020-12-16T05:44:41Z",
-        "measurement_url": "https://api.ooni.io/api/v1/raw_measurement?report_id=20201216T050353Z_webconnectivity_VE_21826_n1_wxAHEUDoof21UBss&input=http%3A%2F%2Fwww.theonion.com%2F",
+        "measurement_url": "https://api.ooni.io/api/v1/raw_measurement?measurement_uid=20201216054344.884408_VE_webconnectivity_a255255d74fff0be",
+        "measurement_uid": "20201216054344.884408_VE_webconnectivity_a255255d74fff0be",
         "probe_asn": "AS21826",
         "probe_cc": "VE",
         "report_id": rid,
@@ -488,7 +513,7 @@ def test_list_measurements_one(client):
     }
 
 
-@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run") # FIXME
+@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run")  # FIXME
 def test_list_measurements_search(client):
     # Used by Explorer search
     response = api(
@@ -498,7 +523,7 @@ def test_list_measurements_search(client):
     assert len(response["results"]) == 7, jd(response)
 
 
-@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run") # FIXME
+@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run")  # FIXME
 def test_list_measurements_search_cc(client):
     # Used by Explorer search
     response = api(
@@ -977,5 +1002,3 @@ def test_files_download_missing_legacy(client):
     url = "files/download/without-slash-bogus-probe.json"
     response = client.get(url)
     assert response.status_code == 404
-
-

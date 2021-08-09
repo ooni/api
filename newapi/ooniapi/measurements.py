@@ -59,8 +59,9 @@ class QueryTimeoutError(HTTPException):
     description = "The database query timed out.\nTry changing the query parameters."
 
 
-class MsmtNotFound(Exception):
-    pass
+class MsmtNotFound(HTTPException):
+    code = 500
+    description = "Measurement not found"
 
 
 def get_version():
@@ -189,7 +190,7 @@ def _fetch_jsonl_measurement_body_inner(
     raise MsmtNotFound
 
 
-def _fetch_jsonl_measurement_body(report_id, input: str, measurement_uid) -> bytes:
+def _fetch_jsonl_measurement_body(report_id, input, measurement_uid: Optional[str]) -> bytes:
     """Fetch jsonl from S3, decompress it, extract msmt"""
     query = "SELECT s3path, linenum FROM jsonl "
     inp = input or ""  # NULL/None input is stored as ''
@@ -199,7 +200,6 @@ def _fetch_jsonl_measurement_body(report_id, input: str, measurement_uid) -> byt
 
     else:
         query += """WHERE measurement_uid = :mid
-        OR (report_id = :rid AND input = :inp)
         LIMIT 1
         """
         query_params = dict(inp=inp, rid=report_id, mid=measurement_uid)
@@ -228,6 +228,26 @@ def _unwrap_post(post: dict) -> dict:
     raise Exception("Unexpected format")
 
 
+def _read_measurement_from_disk(msmt_uid: str) -> Optional[bytes]:
+    """Reads msmt from local disk cache or returns None"""
+    assert msmt_uid
+    if not msmt_uid.startswith("20"):
+        return None
+    tstamp, cc, testname, hash_ = msmt_uid.split("_")
+    hour = tstamp[:10]
+    int(hour)
+    spooldir = Path("/var/lib/ooniapi/measurements/incoming/")
+    postf = spooldir / f"{hour}_{cc}_{testname}/{msmt_uid}.post"
+    log.debug(f"Attempt at reading {postf}")
+    try:
+        with postf.open() as f:
+            post = ujson.load(f)
+    except FileNotFoundError:
+        return None
+    body = _unwrap_post(post)
+    return ujson.dumps(body).encode()
+
+
 def _fetch_measurement_body_on_disk(report_id, input: str) -> Optional[bytes]:
     """Fetch raw POST from disk, extract msmt
     This is used only for msmts that have been processed by the fastpath
@@ -254,20 +274,8 @@ def _fetch_measurement_body_on_disk(report_id, input: str) -> Optional[bytes]:
     if msmt_uid is None:
         # older msmt
         return None
-    assert msmt_uid.startswith("20")
-    tstamp, cc, testname, hash_ = msmt_uid.split("_")
-    hour = tstamp[:10]
-    int(hour)
-    spooldir = Path("/var/lib/ooniapi/measurements/incoming/")
-    postf = spooldir / f"{hour}_{cc}_{testname}/{msmt_uid}.post"
-    log.debug(f"Attempt at reading {postf}")
-    try:
-        with postf.open() as f:
-            post = ujson.load(f)
-    except FileNotFoundError:
-        return None
-    body = _unwrap_post(post)
-    return ujson.dumps(body).encode()
+
+    return _read_measurement_from_disk(msmt_uid)
 
 
 def _fetch_autoclaved_measurement_body(report_id: str, input) -> bytes:
@@ -328,6 +336,17 @@ def _fetch_measurement_body(report_id, input: str, measurement_uid) -> bytes:
     raise MsmtNotFound
 
 
+def _fetch_measurement_body_by_uid(msmt_uid: str) -> bytes:
+    """Fetch measurement body from either disk or jsonl on S3"""
+    log.debug(f"Fetching body for UID {msmt_uid}")
+    body = _read_measurement_from_disk(msmt_uid)
+    if body is not None:
+        return body
+
+    log.debug(f"Fetching body for UID {msmt_uid} from jsonl on S3")
+    return _fetch_jsonl_measurement_body(None, None, msmt_uid)
+
+
 def genurl(path: str, **kw) -> str:
     """Generate absolute URL for the API"""
     base = current_app.config["BASE_URL"]
@@ -337,7 +356,7 @@ def genurl(path: str, **kw) -> str:
 @api_msm_blueprint.route("/v1/raw_measurement")
 @metrics.timer("get_raw_measurement")
 def get_raw_measurement():
-    """Get raw measurement body by measurement_id + input
+    """Get raw measurement body by either measurement_id + input or measurement_uid
     ---
     parameters:
       - name: report_id
@@ -349,6 +368,10 @@ def get_raw_measurement():
         type: string
         minLength: 3
         description: The input (for example a URL or IP address) to search measurements for
+      - name: measurement_uid
+        in: query
+        type: string
+        description: The measurement unique ID
     responses:
       '200':
         description: raw measurement body, served as JSON file to be dowloaded
@@ -356,11 +379,17 @@ def get_raw_measurement():
     # This is used by Explorer to let users download msmts
     log = current_app.logger
     param = request.args.get
-    report_id = param("report_id")
-    if not report_id or len(report_id) < 15:
-        raise BadRequest("Invalid report_id")
-    input = param("input")
-    body = _fetch_measurement_body(report_id, input, None)
+    msmt_uid = param("measurement_uid")
+    if msmt_uid:
+        body = _fetch_measurement_body_by_uid(msmt_uid)
+
+    else:
+        report_id = param("report_id")
+        if not report_id or len(report_id) < 15:
+            raise BadRequest("Invalid report_id")
+        input = param("input")
+        body = _fetch_measurement_body(report_id, input, None)
+
     resp = make_response(body)
     resp.headers.set("Content-Type", "application/json")
     resp.cache_control.max_age = 24 * 3600
@@ -747,6 +776,7 @@ def list_measurements():
         literal_column("confirmed"),
         literal_column("msm_failure").label("failure"),
         cast(sql.text("scores"), String).label("scores"),
+        literal_column("measurement_uid"),
         literal_column("report_id"),
         literal_column("probe_cc"),
         literal_column("probe_asn"),
@@ -874,16 +904,12 @@ def list_measurements():
         q = current_app.db_session.execute(query, query_params)
         tmpresults = []
         for row in q:
-            if row.input in (None, ""):
-                url = genurl("/api/v1/raw_measurement", report_id=row.report_id)
-            else:
-                url = genurl(
-                    "/api/v1/raw_measurement", report_id=row.report_id, input=row.input
-                )
+            url = genurl("/api/v1/raw_measurement", measurement_uid=row.measurement_uid)
             tmpresults.append(
                 {
                     "measurement_url": url,
                     "report_id": row.report_id,
+                    "measurement_uid": row.measurement_uid,
                     "probe_cc": row.probe_cc,
                     "probe_asn": "AS{}".format(row.probe_asn),
                     "test_name": row.test_name,
