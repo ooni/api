@@ -190,7 +190,9 @@ def _fetch_jsonl_measurement_body_inner(
     raise MsmtNotFound
 
 
-def _fetch_jsonl_measurement_body(report_id, input, measurement_uid: Optional[str]) -> bytes:
+def _fetch_jsonl_measurement_body(
+    report_id, input, measurement_uid: Optional[str]
+) -> bytes:
     """Fetch jsonl from S3, decompress it, extract msmt"""
     query = "SELECT s3path, linenum FROM jsonl "
     inp = input or ""  # NULL/None input is stored as ''
@@ -207,7 +209,7 @@ def _fetch_jsonl_measurement_body(report_id, input, measurement_uid: Optional[st
         query += "WHERE report_id = :report_id AND input = :inp LIMIT 1"
         query_params = dict(inp=inp, report_id=report_id)
 
-    #else:
+    # else:
     #    query += """WHERE measurement_uid = :mid
     #    LIMIT 1
     #    """

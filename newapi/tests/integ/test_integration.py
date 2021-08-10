@@ -460,7 +460,7 @@ def test_get_measurement_meta_full_reprocessed(client):
 
 
 def test_get_measurement_meta_by_msmt_uid(client):
-    uid = '20210801000007.403848_BR_webconnectivity_a64ce4a5cc068245'
+    uid = "20210801000007.403848_BR_webconnectivity_a64ce4a5cc068245"
     r = api(client, "measurement_meta", measurement_uid=uid, full="true")
     assert r
     data = r.pop("raw_measurement")
@@ -468,18 +468,19 @@ def test_get_measurement_meta_by_msmt_uid(client):
         "anomaly": True,
         "confirmed": False,
         "failure": False,
-        "input": 'https://mail.yahoo.com/',
+        "input": "https://mail.yahoo.com/",
         "measurement_start_time": "2021-08-01T00:00:01Z",
         "measurement_uid": uid,
         "probe_asn": 14868,
         "probe_cc": "BR",
-        "report_id": '20210731T225551Z_webconnectivity_BR_14868_n1_6Iq5QqbAX9EYx47w',
+        "report_id": "20210731T225551Z_webconnectivity_BR_14868_n1_6Iq5QqbAX9EYx47w",
         "scores": '{"blocking_general":1.0,"blocking_global":0.0,"blocking_country":0.0,"blocking_isp":0.0,"blocking_local":0.0,"analysis":{"blocking_type":"dns"}}',
         "test_name": "web_connectivity",
         "test_start_time": "2021-07-31T22:55:50Z",
     }
     assert data is not None
     assert "test_keys" in data, repr(data)
+
 
 # # get_raw_measurement # #
 
@@ -498,7 +499,7 @@ def test_get_raw_measurement_by_msmt_uid_bogus(client):
 
 
 def test_get_raw_measurement_by_msmt_uid(client):
-    uid = '20210801000007.403848_BR_webconnectivity_a64ce4a5cc068245'
+    uid = "20210801000007.403848_BR_webconnectivity_a64ce4a5cc068245"
     r = api(client, "raw_measurement", measurement_uid=uid)
     assert "test_keys" in r
     assert r["test_runtime"] == 0.4092199802
@@ -525,28 +526,29 @@ def test_list_measurements_search_date_ranges(client):
 
 
 def test_list_measurements_one(client):
-    rid = "20201216T050353Z_webconnectivity_VE_21826_n1_wxAHEUDoof21UBss"
-    inp = "http://www.theonion.com/"
+    rid = "20210731T225551Z_webconnectivity_BR_14868_n1_6Iq5QqbAX9EYx47w"
+    inp = "https://mail.yahoo.com/"
     response = api(client, f"measurements?report_id={rid}&input={inp}")
     assert response["metadata"]["count"] == 1, jd(response)
     r = response["results"][0]
     assert r == {
-        "anomaly": False,
+        "anomaly": True,
         "confirmed": False,
         "failure": False,
         "input": inp,
-        "measurement_start_time": "2020-12-16T05:44:41Z",
-        "measurement_url": "https://api.ooni.io/api/v1/raw_measurement?measurement_uid=20201216054344.884408_VE_webconnectivity_a255255d74fff0be",
-        "measurement_uid": "20201216054344.884408_VE_webconnectivity_a255255d74fff0be",
-        "probe_asn": "AS21826",
-        "probe_cc": "VE",
+        "measurement_start_time": "2021-08-01T00:00:01Z",
+        "measurement_url": "https://api.ooni.io/api/v1/raw_measurement?measurement_uid=20210801000007.403848_BR_webconnectivity_a64ce4a5cc068245",
+        "measurement_uid": "20210801000007.403848_BR_webconnectivity_a64ce4a5cc068245",
+        "probe_asn": "AS14868",
+        "probe_cc": "BR",
         "report_id": rid,
         "scores": {
             "blocking_country": 0.0,
-            "blocking_general": 0.0,
+            "blocking_general": 1.0,
             "blocking_global": 0.0,
             "blocking_isp": 0.0,
             "blocking_local": 0.0,
+            "analysis": {"blocking_type": "dns"},
         },
         "test_name": "web_connectivity",
     }
