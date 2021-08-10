@@ -36,8 +36,14 @@ INSERT INTO public.url_priorities VALUES ('NEWS', 'it', 'www.leggo.it', '*', 5);
 INSERT INTO public.url_priorities VALUES ('COMT', '*', '*', '*', 100);
 INSERT INTO public.url_priorities VALUES ('GRP', '*', '*', '*', 100);
 
-INSERT INTO public.fastpath VALUES ('20201216054344.884408_VE_webconnectivity_a255255d74fff0be', '20201216T050353Z_webconnectivity_VE_21826_n1_wxAHEUDoof21UBss', 'http://www.theonion.com/', 'VE', 21826, 'web_connectivity', '2020-12-16 05:03:48', '2020-12-16 05:44:41', NULL, '{"blocking_general":0.0,"blocking_global":0.0,"blocking_country":0.0,"blocking_isp":0.0,"blocking_local":0.0}', 'linux', false, false, false, 'www.theonion.com', 'ooniprobe-cli', '3.0.7-beta');
-
 INSERT INTO public.citizenlab VALUES ('www.theonion.com', 'http://www.theonion.com/', 'ZZ', 'CULTR', 40);
 
---INSERT INTO public.jsonl VALUES ('20201216T050353Z_webconnectivity_VE_21826_n1_wxAHEUDoof21UBss', 'http://www.theonion.com/', NULL, 'raw/20201216/05/VE/webconnectivity/2020121605_VE_webconnectivity.n0.8.jsonl.gz', 119);
+-- Test item in fastpath and jsonl. Found with:
+-- SELECT * FROM fastpath
+-- WHERE measurement_start_time > '2021-8-1' AND measurement_start_time < '2021-8-9' AND test_name = 'web_connectivity'
+-- AND EXISTS ( SELECT 1 FROM jsonl WHERE report_id = fastpath.report_id AND input = fastpath.input) LIMIT 1;
+
+INSERT INTO public.fastpath VALUES ('20210801000007.403848_BR_webconnectivity_a64ce4a5cc068245', '20210731T225551Z_webconnectivity_BR_14868_n1_6Iq5QqbAX9EYx47w', 'https://mail.yahoo.com/', 'BR', 14868, 'web_connectivity', '2021-07-31 22:55:50', '2021-08-01 00:00:01', NULL, '{"blocking_general":1.0,"blocking_global":0.0,"blocking_country":0.0,"blocking_isp":0.0,"blocking_local":0.0,"analysis":{"blocking_type":"dns"}}', 'macos', true, false, false, 'mail.yahoo.com', 'ooniprobe', '2.3.0');
+
+INSERT INTO public.jsonl VALUES ('20210731T225551Z_webconnectivity_BR_14868_n1_6Iq5QqbAX9EYx47w', 'https://mail.yahoo.com/', 'raw/20210801/00/BR/webconnectivity/2021080100_BR_webconnectivity.n0.0.jsonl.gz', 9, NULL);
+

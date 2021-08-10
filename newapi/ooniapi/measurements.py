@@ -194,15 +194,24 @@ def _fetch_jsonl_measurement_body(report_id, input, measurement_uid: Optional[st
     """Fetch jsonl from S3, decompress it, extract msmt"""
     query = "SELECT s3path, linenum FROM jsonl "
     inp = input or ""  # NULL/None input is stored as ''
-    if measurement_uid is None:
+
+    # We cannot lookup jsonl by measurement_uid just yet
+    if measurement_uid and not report_id:
+        query += """JOIN fastpath
+        ON jsonl.input = fastpath.input AND jsonl.report_id = fastpath.report_id
+        WHERE fastpath.measurement_uid = :mid
+        LIMIT 1"""
+        query_params = dict(mid=measurement_uid)
+
+    else:
         query += "WHERE report_id = :report_id AND input = :inp LIMIT 1"
         query_params = dict(inp=inp, report_id=report_id)
 
-    else:
-        query += """WHERE measurement_uid = :mid
-        LIMIT 1
-        """
-        query_params = dict(inp=inp, rid=report_id, mid=measurement_uid)
+    #else:
+    #    query += """WHERE measurement_uid = :mid
+    #    LIMIT 1
+    #    """
+    #    query_params = dict(inp=inp, rid=report_id, mid=measurement_uid)
 
     q = current_app.db_session.execute(query, query_params)
     lookup = q.fetchone()
@@ -309,7 +318,7 @@ def _fetch_autoclaved_measurement_body(report_id: str, input) -> bytes:
     return body
 
 
-def _fetch_measurement_body(report_id, input: str, measurement_uid) -> bytes:
+def _fetch_measurement_body(report_id, input: str) -> bytes:
     """Fetch measurement body from either disk, jsonl or autoclaved on S3"""
     log.debug(f"Fetching body for {report_id} {input}")
     u_count = report_id.count("_")
@@ -323,7 +332,7 @@ def _fetch_measurement_body(report_id, input: str, measurement_uid) -> bytes:
 
     log.debug(f"Fetching body for {report_id} {input} from jsonl on S3")
     try:
-        return _fetch_jsonl_measurement_body(report_id, input, measurement_uid)
+        return _fetch_jsonl_measurement_body(report_id, input, None)
     except MsmtNotFound:
         pass
 
@@ -388,7 +397,7 @@ def get_raw_measurement():
         if not report_id or len(report_id) < 15:
             raise BadRequest("Invalid report_id")
         input = param("input")
-        body = _fetch_measurement_body(report_id, input, None)
+        body = _fetch_measurement_body(report_id, input)
 
     resp = make_response(body)
     resp.headers.set("Content-Type", "application/json")
@@ -399,7 +408,7 @@ def get_raw_measurement():
 @api_msm_blueprint.route("/v1/measurement_meta")
 @metrics.timer("get_measurement_meta")
 def get_measurement_meta():
-    """Get metadata on one measurement by measurement_id + input
+    """Get metadata on one measurement by either measurement_uid or measurement_id + input
     ---
     produces:
       - application/json
@@ -409,13 +418,17 @@ def get_measurement_meta():
         type: string
         description: The report_id to search measurements for
         minLength: 3
-        required: True
         example: 20210208T162755Z_ndt_DZ_36947_n1_8swgXi7xNuRUyO9a
       - name: input
         in: query
         type: string
         minLength: 3 # `input` is handled by pg_trgm
         description: The input (for example a URL or IP address) to search measurements for
+      - name: measurement_uid
+        in: query
+        type: string
+        description: The measurement unique ID
+        minLength: 10
       - name: full
         in: query
         type: boolean
@@ -471,16 +484,15 @@ def get_measurement_meta():
     # TODO: see integ tests for TODO items
     param = request.args.get
     report_id = param("report_id")
-    if not report_id or len(report_id) < 15:
-        raise BadRequest("Invalid report_id")
-    input = param("input", None)
-    if input == "":
-        input = None
-
+    msmt_uid = param("measurement_uid")
+    if not msmt_uid:
+        if not report_id or len(report_id) < 15:
+            raise BadRequest("Invalid report_id")
+    input = param("input", None) or None
     full = param("full", "").lower() in ("true", "1", "yes")
-    log.info(f"get_measurement_meta '{report_id}' '{input}'")
+    log.info(f"get_measurement_meta '{msmt_uid}' '{report_id}' '{input}'")
 
-    # Given report_id + input, fetch measurement data from fastpath table
+    # Given msmt_uid / report_id + input, fetch measurement data from fastpath table
     query = """SELECT
         anomaly,
         confirmed,
@@ -496,13 +508,21 @@ def get_measurement_meta():
         test_start_time
     """
     # fastpath uses input = '' for empty values
-    if input is None:
+    if msmt_uid:
+        query += """
+        FROM fastpath
+        WHERE fastpath.measurement_uid = :msmt_uid
+        """
+        query_params = dict(msmt_uid=msmt_uid)
+
+    elif input is None:
         query += """
         FROM fastpath
         WHERE fastpath.report_id = :report_id
         AND (fastpath.input IS NULL or fastpath.input = '')
-        AND probe_asn != 0
         """
+        query_params = dict(report_id=report_id)
+
     else:
         query += """
             , citizenlab.category_code AS category_code
@@ -510,9 +530,11 @@ def get_measurement_meta():
         LEFT OUTER JOIN citizenlab ON citizenlab.url = fastpath.input
         WHERE fastpath.input = :input
         AND fastpath.report_id = :report_id
-        AND probe_asn != 0
         """
-    query_params = dict(input=input, report_id=report_id)
+        query_params = dict(input=input, report_id=report_id)
+
+    query += "AND probe_asn != 0"
+
     q = current_app.db_session.execute(query, query_params)
     msmt_meta = q.fetchone()
     if msmt_meta is None:
@@ -524,12 +546,11 @@ def get_measurement_meta():
     if not full:
         return cachedjson(24, **msmt_meta)
 
-    try:
-        body = _fetch_measurement_body(report_id, input, msmt_meta["measurement_uid"])
-        assert isinstance(body, bytes)
+    # We cannot lookup jsonl by measurement_uid just yet
+    body = _fetch_measurement_body(msmt_meta["report_id"], msmt_meta["input"])
+    if body:
         body = body.decode()
-    except Exception as e:
-        log.error(e, exc_info=1)
+    else:
         body = ""
 
     return cachedjson(24, raw_measurement=body, **msmt_meta)

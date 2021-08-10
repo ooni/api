@@ -436,7 +436,6 @@ def test_get_measurement_meta_full_reprocessed(client):
     rid = "20181030T014439Z_AS10796_ucOhFJsuTvBnUYbJvIaYeMjWe1lxHbfZHuyY9lJp77BXqS7tki"
     inp = "http://del.icio.us"
     response = api(client, f"measurement_meta?report_id={rid}&input={inp}&full=True")
-    print(response)
     assert response
     data = response.pop("raw_measurement")
     assert response == {
@@ -460,6 +459,28 @@ def test_get_measurement_meta_full_reprocessed(client):
     assert "test_keys" in data
 
 
+def test_get_measurement_meta_by_msmt_uid(client):
+    uid = '20210801000007.403848_BR_webconnectivity_a64ce4a5cc068245'
+    r = api(client, "measurement_meta", measurement_uid=uid, full="true")
+    assert r
+    data = r.pop("raw_measurement")
+    assert r == {
+        "anomaly": True,
+        "confirmed": False,
+        "failure": False,
+        "input": 'https://mail.yahoo.com/',
+        "measurement_start_time": "2021-08-01T00:00:01Z",
+        "measurement_uid": uid,
+        "probe_asn": 14868,
+        "probe_cc": "BR",
+        "report_id": '20210731T225551Z_webconnectivity_BR_14868_n1_6Iq5QqbAX9EYx47w',
+        "scores": '{"blocking_general":1.0,"blocking_global":0.0,"blocking_country":0.0,"blocking_isp":0.0,"blocking_local":0.0,"analysis":{"blocking_type":"dns"}}',
+        "test_name": "web_connectivity",
+        "test_start_time": "2021-07-31T22:55:50Z",
+    }
+    assert data is not None
+    assert "test_keys" in data, repr(data)
+
 # # get_raw_measurement # #
 
 # https://explorer.ooni.org/measurement/20210622T144545Z_riseupvpn_MM_133384_n1_VJkB5EObudGDpy9Y
@@ -476,13 +497,31 @@ def test_get_raw_measurement_by_msmt_uid_bogus(client):
     r = api_expect_status(client, 500, "raw_measurement", measurement_uid=uid)
 
 
-@pytest.mark.skipif(not pytest.proddb, reason="use --proddb to run")
 def test_get_raw_measurement_by_msmt_uid(client):
-    uid = "20201216054344.884408_VE_webconnectivity_a255255d74fff0be"
+    uid = '20210801000007.403848_BR_webconnectivity_a64ce4a5cc068245'
     r = api(client, "raw_measurement", measurement_uid=uid)
+    assert "test_keys" in r
+    assert r["test_runtime"] == 0.4092199802
 
 
 # # list_measurements # #
+
+
+def test_list_measurements_search_date_ranges(client):
+    r = api(client, "measurements", since="2021-6-8", until="2021-6-9")
+    assert len(r["results"]) == 0, jd(r)
+
+    r = api(client, "measurements", since="2021-7-8", until="2021-7-9")
+    assert len(r["results"]) == 100, jd(r)
+
+    r = api(client, "measurements", since="2021-7-9", until="2021-7-10")
+    assert len(r["results"]) == 100, jd(r)
+
+    r = api(client, "measurements", since="2021-7-10", until="2021-7-11")
+    assert len(r["results"]) == 2, jd(r)
+
+    r = api(client, "measurements", since="2021-7-11", until="2030-1-1")
+    assert len(r["results"]) == 0, jd(r)
 
 
 def test_list_measurements_one(client):

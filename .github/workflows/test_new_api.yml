@@ -1,4 +1,4 @@
-name: OONI API local tests
+name: OONI API local end-to-end tests
 on:
   push:
   pull_request:

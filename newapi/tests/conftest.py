@@ -101,6 +101,7 @@ def setup_database_part_1():
 
 @pytest.fixture(scope="session")
 def checkout_pipeline(tmpdir_factory):
+    """Checkout pipeline/fastpath repo from github"""
     if not pytest.create_db:
         return
     d = tmpdir_factory.mktemp("pipeline")
@@ -136,6 +137,9 @@ def run_sql_scripts(app):
 
 
 def run_fastpath(log, pipeline_dir, dburi):
+    """Runs fastpath fetching postcans from S3 for a couple of days
+    for a limited number of measurements
+    """
     fpdir = pipeline_dir / "af" / "fastpath"
     fprun = fpdir / "run_fastpath"
     conffile = fpdir / "etc/ooni/fastpath.conf"
@@ -168,8 +172,9 @@ def run_fastpath(log, pipeline_dir, dburi):
 
 @pytest.fixture(autouse=True, scope="session")
 def setup_database_part_2(setup_database_part_1, app, checkout_pipeline):
-    # Create tables, indexes and so on
-    # This part needs the "app" object
+    """Creates tables, indexes and so on. Runs fastpath to populate the DB.
+    This part needs the "app" object
+    """
     if not pytest.create_db:
         return
 
@@ -179,6 +184,7 @@ def setup_database_part_2(setup_database_part_1, app, checkout_pipeline):
         sys.exit(1)
 
     log = app.logger
+    # Create tables and populate them with test data
     run_sql_scripts(app)
     run_fastpath(log, checkout_pipeline, dburi)
 
