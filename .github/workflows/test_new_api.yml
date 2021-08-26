@@ -30,7 +30,8 @@ jobs:
               tests/integ/test_integration.py \
               tests/integ/test_integration_auth.py \
               tests/integ/test_aggregation.py \
-              tests/integ/test_citizenlab.py
+              tests/integ/test_citizenlab.py \
+              tests/integ/test_prioritization.py
       - name: debug docker
         if: always()
         run: docker logs api_db_1
