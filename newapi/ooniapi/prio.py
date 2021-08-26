@@ -163,13 +163,12 @@ ON (citiz.url = cnt.input)
         for pr in prio_rules:
             if match_prio_rule(e, pr):
                 priority += pr["priority"]
-        s = e["msmt_cnt"] / max(priority, 1)
         o = dict(e)
         o["priority"] = priority
-        o["s"] = s
+        o["weight"] =  priority / max(e["msmt_cnt"], 0.1)
         test_list.append(o)
 
-    test_list = sorted(test_list, key=lambda k: k["s"])
+    test_list = sorted(test_list, key=lambda k: k["weight"], reverse=True)
     return test_list
 
 
@@ -194,7 +193,7 @@ def generate_test_list(
         if debug:
             i["msmt_cnt"] = entry["msmt_cnt"]
             i["priority"] = entry["priority"]
-            i["s"] = entry["s"]
+            i["weight"] = entry["weight"]
         out.append(i)
         if len(out) >= limit:
             break
