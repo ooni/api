@@ -166,7 +166,7 @@ ON (citiz.url = cnt.input)
             log.info((dict(e), dict(pr)))
             if match_prio_rule(e, pr):
                 priority += pr["priority"]
-        s = e["msmt_cnt"] / min(priority, 1)
+        s = e["msmt_cnt"] / max(priority, 1)
         o = dict(e)
         o["priority"] = priority
         o["s"] = s
