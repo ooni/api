@@ -125,8 +125,6 @@ def fetch_reactive_url_list(cc: str):
     # Select all citizenlab URLs for the given probe_cc + ZZ
     # Select measurements count from the last 7 days in a left outer join
     # (without any info about priority)
-    q = current_app.db_session.execute("SELECT * FROM counters_test_list")
-    log.error(q.fetchall())
     sql = """
 SELECT category_code, domain, url, cc, COALESCE(msmt_cnt, 0)::float AS msmt_cnt
 FROM (
@@ -163,7 +161,6 @@ ON (citiz.url = cnt.input)
         # Calculate priority for an URL
         priority = 0
         for pr in prio_rules:
-            log.info((dict(e), dict(pr)))
             if match_prio_rule(e, pr):
                 priority += pr["priority"]
         s = e["msmt_cnt"] / max(priority, 1)
