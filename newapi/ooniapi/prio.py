@@ -174,7 +174,9 @@ ON (citiz.url = cnt.input)
 
 
 @metrics.timer("generate_test_list")
-def generate_test_list(country_code: str, category_codes: tuple, limit: int):
+def generate_test_list(
+    country_code: str, category_codes: tuple, limit: int, debug: bool
+):
     """Generate test list based on the amount of measurements in the last
     N days"""
     out = []
@@ -189,6 +191,10 @@ def generate_test_list(country_code: str, category_codes: tuple, limit: int):
             "url": entry["url"],
             "country_code": cc,
         }
+        if debug:
+            i["msmt_cnt"] = entry["msmt_cnt"]
+            i["priority"] = entry["priority"]
+            i["s"] = entry["s"]
         out.append(i)
         if len(out) >= limit:
             break
@@ -223,6 +229,10 @@ def list_test_urls():
         in: query
         type: integer
         description: Maximum number of URLs to return
+      - name: debug
+        in: query
+        type: boolean
+        description: Include measurement counts and priority
     responses:
       200:
         description: URL test list
@@ -263,12 +273,13 @@ def list_test_urls():
         limit = int(param("limit") or -1)
         if limit == -1:
             limit = 9999
+        debug = param("debug", "").lower() in ("true", "1", "yes")
     except Exception as e:
         log.error(e, exc_info=1)
         return jsonify({})
 
     try:
-        test_items = generate_test_list(country_code, category_codes, limit)
+        test_items = generate_test_list(country_code, category_codes, limit, debug)
     except Exception as e:
         log.error(e, exc_info=1)
         # failover_generate_test_list runs without any database interaction
