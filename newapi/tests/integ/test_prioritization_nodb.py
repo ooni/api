@@ -48,7 +48,7 @@ def mockdb(query, *query_kw):
 
 
 @pytest.fixture
-def nodb(mocker, app):
+def nodb(app):
     app.db_session.execute = mockdb
 
 
