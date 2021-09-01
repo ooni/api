@@ -31,7 +31,7 @@ jobs:
               tests/integ/test_citizenlab.py \
               tests/integ/test_integration.py \
               tests/integ/test_integration_auth.py \
-              tests/integ/test_prioritization.py \
+              tests/integ/test_prioritization_nodb.py \
               tests/integ/test_probe_services.py
       - name: debug docker
         if: always()
