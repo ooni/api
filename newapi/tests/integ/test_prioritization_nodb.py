@@ -12,6 +12,9 @@ from pathlib import Path
 import pytest
 from mock import MagicMock
 
+# Extract database responses with:
+# COPY (SELECT json_agg(t) FROM (...) t) TO '/tmp/<name>.json';
+
 queries = {
     (
         "SELECT category_code, priority, url FROM citizenlab WHERE cc = 'ZZ' ORDER BY priority DESC"
