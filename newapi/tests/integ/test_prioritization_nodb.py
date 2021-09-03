@@ -106,11 +106,11 @@ def test_url_prioritization_category_codes(client, nodb):
     assert len(set(r["url"] for r in c["results"])) == 100
 
 
-def test_url_prioritization_country_code_limit(client, nodb):
-    c = getjson(client, "/api/v1/test-list/urls?country_code=US&limit=999")
+def test_url_prioritization_country_code_limit_debug(client, nodb):
+    c = getjson(client, "/api/v1/test-list/urls?country_code=US&limit=9999&debug=true")
     assert "metadata" in c
     assert c["metadata"] == {
-        "count": 999,
+        "count": 1514,
         "current_page": -1,
         "limit": -1,
         "next_url": "",
@@ -119,7 +119,17 @@ def test_url_prioritization_country_code_limit(client, nodb):
     for r in c["results"]:
         assert r["country_code"] in ("XX", "US")
 
-    assert len(set(r["url"] for r in c["results"])) == 999
+    assert len(c["results"]) == 1514
+    for r in c["results"]:
+        if r["url"] == "https://thehiddenwiki.org/":
+            assert r == {
+                "category_code": "MISC",
+                "country_code": "XX",
+                "msmt_cnt": 38,
+                "priority": -180,
+                "url": "https://thehiddenwiki.org/",
+                "weight": -4.7368421052631575,
+            }
 
 
 def test_url_prioritization_country_code_nolimit(client, nodb):

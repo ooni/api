@@ -32,7 +32,8 @@ jobs:
               tests/integ/test_integration.py \
               tests/integ/test_integration_auth.py \
               tests/integ/test_prioritization_nodb.py \
-              tests/integ/test_probe_services_nodb.py
+              tests/integ/test_probe_services_nodb.py \
+              tests/unit/test_prio.py
       - name: debug docker
         if: always()
         run: docker logs api_db_1

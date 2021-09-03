@@ -107,9 +107,12 @@ def failover_generate_test_list(country_code: str, category_codes: tuple, limit:
 
 def match_prio_rule(cz, pr: dict) -> bool:
     """Match a priority rule to citizenlab entry"""
-    for k in ["category_code", "cc", "domain", "url"]:
+    for k in ["category_code", "domain", "url"]:
         if pr[k] not in ("*", cz[k]):
             return False
+
+    if cz["cc"] != "ZZ" and pr["cc"] not in ("*", cz["cc"]):
+        return False
 
     return True
 
@@ -163,6 +166,7 @@ ON (citiz.url = cnt.input)
         for pr in prio_rules:
             if match_prio_rule(e, pr):
                 priority += pr["priority"]
+
         o = dict(e)
         o["priority"] = priority
         o["weight"] =  priority / max(e["msmt_cnt"], 0.1)

@@ -1,1 +1,338 @@
-[{"category_code":"NEWS","cc":"*","domain":"*","url":"*","priority":100},{"category_code":"POLR","cc":"*","domain":"*","url":"*","priority":100},{"category_code":"HUMR","cc":"*","domain":"*","url":"*","priority":100},{"category_code":"LGBT","cc":"*","domain":"*","url":"*","priority":100},{"category_code":"ANON","cc":"*","domain":"*","url":"*","priority":100},{"category_code":"GRP","cc":"*","domain":"*","url":"*","priority":80},{"category_code":"COMT","cc":"*","domain":"*","url":"*","priority":80},{"category_code":"MMED","cc":"*","domain":"*","url":"*","priority":80},{"category_code":"SRCH","cc":"*","domain":"*","url":"*","priority":80},{"category_code":"PUBH","cc":"*","domain":"*","url":"*","priority":80},{"category_code":"REL","cc":"*","domain":"*","url":"*","priority":60},{"category_code":"XED","cc":"*","domain":"*","url":"*","priority":60},{"category_code":"HOST","cc":"*","domain":"*","url":"*","priority":60},{"category_code":"ENV","cc":"*","domain":"*","url":"*","priority":60},{"category_code":"FILE","cc":"*","domain":"*","url":"*","priority":40},{"category_code":"CULTR","cc":"*","domain":"*","url":"*","priority":40},{"category_code":"IGO","cc":"*","domain":"*","url":"*","priority":40},{"category_code":"GOVT","cc":"*","domain":"*","url":"*","priority":40},{"category_code":"DATE","cc":"*","domain":"*","url":"*","priority":30},{"category_code":"HATE","cc":"*","domain":"*","url":"*","priority":30},{"category_code":"MILX","cc":"*","domain":"*","url":"*","priority":30},{"category_code":"PROV","cc":"*","domain":"*","url":"*","priority":30},{"category_code":"PORN","cc":"*","domain":"*","url":"*","priority":30},{"category_code":"GMB","cc":"*","domain":"*","url":"*","priority":30},{"category_code":"ALDR","cc":"*","domain":"*","url":"*","priority":30},{"category_code":"GAME","cc":"*","domain":"*","url":"*","priority":20},{"category_code":"MISC","cc":"*","domain":"*","url":"*","priority":20},{"category_code":"HACK","cc":"*","domain":"*","url":"*","priority":20},{"category_code":"ECON","cc":"*","domain":"*","url":"*","priority":20},{"category_code":"COMM","cc":"*","domain":"*","url":"*","priority":20},{"category_code":"CTRL","cc":"*","domain":"*","url":"*","priority":20},{"category_code":"*","cc":"*","domain":"www.facebook.com","url":"*","priority":200},{"category_code":"*","cc":"*","domain":"twitter.com","url":"*","priority":200},{"category_code":"*","cc":"*","domain":"www.instagram.com","url":"*","priority":200},{"category_code":"*","cc":"*","domain":"www.whatsapp.com","url":"*","priority":200},{"category_code":"*","cc":"*","domain":"web.whatsapp.com","url":"*","priority":200},{"category_code":"*","cc":"*","domain":"telegram.org","url":"*","priority":200},{"category_code":"*","cc":"*","domain":"web.telegram.org","url":"*","priority":200},{"category_code":"*","cc":"*","domain":"www.youtube.com","url":"*","priority":200},{"category_code":"*","cc":"*","domain":"www.tiktok.com","url":"*","priority":200},{"category_code":"*","cc":"*","domain":"www.viber.com","url":"*","priority":200},{"category_code":"*","cc":"*","domain":"www.snapchat.com","url":"*","priority":200},{"category_code":"*","cc":"*","domain":"www.reddit.com","url":"*","priority":200},{"category_code":"*","cc":"*","domain":"vimeo.com","url":"*","priority":200},{"category_code":"*","cc":"*","domain":"www.wechat.com","url":"*","priority":200},{"category_code":"*","cc":"*","domain":"international.qq.com","url":"*","priority":200},{"category_code":"*","cc":"*","domain":"signal.org","url":"*","priority":200}]
+[
+  {
+    "category_code": "NEWS",
+    "cc": "*",
+    "domain": "*",
+    "priority": 100,
+    "url": "*"
+  },
+  {
+    "category_code": "POLR",
+    "cc": "*",
+    "domain": "*",
+    "priority": 100,
+    "url": "*"
+  },
+  {
+    "category_code": "HUMR",
+    "cc": "*",
+    "domain": "*",
+    "priority": 100,
+    "url": "*"
+  },
+  {
+    "category_code": "LGBT",
+    "cc": "*",
+    "domain": "*",
+    "priority": 100,
+    "url": "*"
+  },
+  {
+    "category_code": "ANON",
+    "cc": "*",
+    "domain": "*",
+    "priority": 100,
+    "url": "*"
+  },
+  {
+    "category_code": "GRP",
+    "cc": "*",
+    "domain": "*",
+    "priority": 80,
+    "url": "*"
+  },
+  {
+    "category_code": "COMT",
+    "cc": "*",
+    "domain": "*",
+    "priority": 80,
+    "url": "*"
+  },
+  {
+    "category_code": "MMED",
+    "cc": "*",
+    "domain": "*",
+    "priority": 80,
+    "url": "*"
+  },
+  {
+    "category_code": "SRCH",
+    "cc": "*",
+    "domain": "*",
+    "priority": 80,
+    "url": "*"
+  },
+  {
+    "category_code": "PUBH",
+    "cc": "*",
+    "domain": "*",
+    "priority": 80,
+    "url": "*"
+  },
+  {
+    "category_code": "REL",
+    "cc": "*",
+    "domain": "*",
+    "priority": 60,
+    "url": "*"
+  },
+  {
+    "category_code": "XED",
+    "cc": "*",
+    "domain": "*",
+    "priority": 60,
+    "url": "*"
+  },
+  {
+    "category_code": "HOST",
+    "cc": "*",
+    "domain": "*",
+    "priority": 60,
+    "url": "*"
+  },
+  {
+    "category_code": "ENV",
+    "cc": "*",
+    "domain": "*",
+    "priority": 60,
+    "url": "*"
+  },
+  {
+    "category_code": "FILE",
+    "cc": "*",
+    "domain": "*",
+    "priority": 40,
+    "url": "*"
+  },
+  {
+    "category_code": "CULTR",
+    "cc": "*",
+    "domain": "*",
+    "priority": 40,
+    "url": "*"
+  },
+  {
+    "category_code": "IGO",
+    "cc": "*",
+    "domain": "*",
+    "priority": 40,
+    "url": "*"
+  },
+  {
+    "category_code": "GOVT",
+    "cc": "*",
+    "domain": "*",
+    "priority": 40,
+    "url": "*"
+  },
+  {
+    "category_code": "DATE",
+    "cc": "*",
+    "domain": "*",
+    "priority": 30,
+    "url": "*"
+  },
+  {
+    "category_code": "HATE",
+    "cc": "*",
+    "domain": "*",
+    "priority": 30,
+    "url": "*"
+  },
+  {
+    "category_code": "MILX",
+    "cc": "*",
+    "domain": "*",
+    "priority": 30,
+    "url": "*"
+  },
+  {
+    "category_code": "PROV",
+    "cc": "*",
+    "domain": "*",
+    "priority": 30,
+    "url": "*"
+  },
+  {
+    "category_code": "PORN",
+    "cc": "*",
+    "domain": "*",
+    "priority": 30,
+    "url": "*"
+  },
+  {
+    "category_code": "GMB",
+    "cc": "*",
+    "domain": "*",
+    "priority": 30,
+    "url": "*"
+  },
+  {
+    "category_code": "ALDR",
+    "cc": "*",
+    "domain": "*",
+    "priority": 30,
+    "url": "*"
+  },
+  {
+    "category_code": "GAME",
+    "cc": "*",
+    "domain": "*",
+    "priority": 20,
+    "url": "*"
+  },
+  {
+    "category_code": "MISC",
+    "cc": "*",
+    "domain": "*",
+    "priority": 20,
+    "url": "*"
+  },
+  {
+    "category_code": "HACK",
+    "cc": "*",
+    "domain": "*",
+    "priority": 20,
+    "url": "*"
+  },
+  {
+    "category_code": "ECON",
+    "cc": "*",
+    "domain": "*",
+    "priority": 20,
+    "url": "*"
+  },
+  {
+    "category_code": "COMM",
+    "cc": "*",
+    "domain": "*",
+    "priority": 20,
+    "url": "*"
+  },
+  {
+    "category_code": "CTRL",
+    "cc": "*",
+    "domain": "*",
+    "priority": 20,
+    "url": "*"
+  },
+  {
+    "category_code": "*",
+    "cc": "*",
+    "domain": "www.facebook.com",
+    "priority": 200,
+    "url": "*"
+  },
+  {
+    "category_code": "*",
+    "cc": "*",
+    "domain": "twitter.com",
+    "priority": 200,
+    "url": "*"
+  },
+  {
+    "category_code": "*",
+    "cc": "*",
+    "domain": "www.instagram.com",
+    "priority": 200,
+    "url": "*"
+  },
+  {
+    "category_code": "*",
+    "cc": "*",
+    "domain": "www.whatsapp.com",
+    "priority": 200,
+    "url": "*"
+  },
+  {
+    "category_code": "*",
+    "cc": "*",
+    "domain": "web.whatsapp.com",
+    "priority": 200,
+    "url": "*"
+  },
+  {
+    "category_code": "*",
+    "cc": "*",
+    "domain": "telegram.org",
+    "priority": 200,
+    "url": "*"
+  },
+  {
+    "category_code": "*",
+    "cc": "*",
+    "domain": "web.telegram.org",
+    "priority": 200,
+    "url": "*"
+  },
+  {
+    "category_code": "*",
+    "cc": "*",
+    "domain": "www.youtube.com",
+    "priority": 200,
+    "url": "*"
+  },
+  {
+    "category_code": "*",
+    "cc": "*",
+    "domain": "www.tiktok.com",
+    "priority": 200,
+    "url": "*"
+  },
+  {
+    "category_code": "*",
+    "cc": "*",
+    "domain": "www.viber.com",
+    "priority": 200,
+    "url": "*"
+  },
+  {
+    "category_code": "*",
+    "cc": "*",
+    "domain": "www.snapchat.com",
+    "priority": 200,
+    "url": "*"
+  },
+  {
+    "category_code": "*",
+    "cc": "*",
+    "domain": "www.reddit.com",
+    "priority": 200,
+    "url": "*"
+  },
+  {
+    "category_code": "*",
+    "cc": "*",
+    "domain": "vimeo.com",
+    "priority": 200,
+    "url": "*"
+  },
+  {
+    "category_code": "*",
+    "cc": "*",
+    "domain": "www.wechat.com",
+    "priority": 200,
+    "url": "*"
+  },
+  {
+    "category_code": "*",
+    "cc": "*",
+    "domain": "international.qq.com",
+    "priority": 200,
+    "url": "*"
+  },
+  {
+    "category_code": "*",
+    "cc": "*",
+    "domain": "signal.org",
+    "priority": 200,
+    "url": "*"
+  },
+  {
+    "category_code": "MISC",
+    "cc": "US",
+    "domain": "*",
+    "priority": -200,
+    "url": "*"
+  }
+]
