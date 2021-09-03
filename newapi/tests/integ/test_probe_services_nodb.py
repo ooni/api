@@ -166,6 +166,32 @@ def test_check_in_url_category_news(client, mocks):
     assert cc == "ZZ"
 
 
+def test_check_in_url_category_multi(client, mocks):
+    j = dict(
+        probe_cc="IT",
+        on_wifi=True,
+        charging=True,
+        web_connectivity=dict(category_codes=["NEWS", "MILX", "FILE"]),
+    )
+    c = postj(client, "/api/v1/check-in", **j)
+    assert c["v"] == 1
+    urls = c["tests"]["web_connectivity"]["urls"]
+    assert len(urls) == 100, urls
+    d = {}
+    for u in urls:
+        cco = u["category_code"]
+        if cco not in d:
+            d[cco] = 0
+        d[cco] += 1
+
+    assert d == {'FILE': 10, 'MILX': 3, 'NEWS': 87}
+    webc_rid = c["tests"]["web_connectivity"]["report_id"]
+    ts, stn, cc, asn_i, _coll, _rand = webc_rid.split("_")
+    assert int(asn_i) == 0
+    assert stn == "webconnectivity"
+    #assert cc == "ZZ"
+
+
 @pytest.mark.skip(reason="broken")
 def test_check_in_url_category_code_passed_as_string(client, mocks):
     # category_codes should be sent as an array, but comma-separated string
