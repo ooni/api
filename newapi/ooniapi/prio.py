@@ -140,8 +140,6 @@ def fetch_reactive_url_list(cc: str):
     """Select all citizenlab URLs for the given probe_cc + ZZ
     Select measurements count from the last 7 days in a left outer join
     (without any info about priority)"""
-    log = current_app.logger
-    log.info("Started fetch_reactive_url_list")
     sql = """
 SELECT category_code, domain, url, cc, COALESCE(msmt_cnt, 0)::float AS msmt_cnt
 FROM (
@@ -161,21 +159,16 @@ ON (citiz.url = cnt.input)
 """
     # support uppercase or lowercase match
     q = current_app.db_session.execute(sql, dict(cc=cc, cc_low=cc.lower()))
-    entries = tuple(q.fetchall())
-    log.info("%d entries", len(entries))
-    return entries
+    return tuple(q.fetchall())
 
 
 @metrics.timer("fetch_prioritization_rules")
-def fetch_prioritization_rules(cc: str) -> list:
+def fetch_prioritization_rules(cc: str) -> tuple:
     sql = """SELECT category_code, cc, domain, url, priority
     FROM url_priorities WHERE cc = :cc OR cc = '*'
     """
-    log = current_app.logger
     q = current_app.db_session.execute(sql, dict(cc=cc))
-    prio_rules = tuple(q.fetchall())
-    log.info("%d priority entries", len(prio_rules))
-    return prio_rules
+    return tuple(q.fetchall())
 
 
 @metrics.timer("generate_test_list")
@@ -184,8 +177,11 @@ def generate_test_list(
 ):
     """Generate test list based on the amount of measurements in the last
     N days"""
+    log = current_app.logger
     entries = fetch_reactive_url_list(country_code)
+    log.info("fetched %d url entries", len(entries))
     prio_rules = fetch_prioritization_rules(country_code)
+    log.info("fetched %d priority rules", len(prio_rules))
     li = compute_priorities(entries, prio_rules)
     # Filter unwanted category codes, replace ZZ, trim priority <= 0
     out = []
