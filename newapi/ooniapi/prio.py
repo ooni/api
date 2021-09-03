@@ -117,17 +117,31 @@ def match_prio_rule(cz, pr: dict) -> bool:
     return True
 
 
+def compute_priorities(entries, prio_rules):
+    # Order based on (msmt_cnt / priority) to provide balancing
+    test_list = []
+    for e in entries:
+        # Calculate priority for an URL
+        priority = 0
+        for pr in prio_rules:
+            if match_prio_rule(e, pr):
+                priority += pr["priority"]
+
+        o = dict(e)
+        o["priority"] = priority
+        o["weight"] = priority / max(e["msmt_cnt"], 0.1)
+        test_list.append(o)
+
+    return sorted(test_list, key=lambda k: k["weight"], reverse=True)
+
+
 @metrics.timer("fetch_reactive_url_list")
 def fetch_reactive_url_list(cc: str):
-    """Fetch test URL from the citizenlab table in the database
-    weighted by the amount of measurements in the last N days
-    """
+    """Select all citizenlab URLs for the given probe_cc + ZZ
+    Select measurements count from the last 7 days in a left outer join
+    (without any info about priority)"""
     log = current_app.logger
     log.info("Started fetch_reactive_url_list")
-
-    # Select all citizenlab URLs for the given probe_cc + ZZ
-    # Select measurements count from the last 7 days in a left outer join
-    # (without any info about priority)
     sql = """
 SELECT category_code, domain, url, cc, COALESCE(msmt_cnt, 0)::float AS msmt_cnt
 FROM (
@@ -149,31 +163,19 @@ ON (citiz.url = cnt.input)
     q = current_app.db_session.execute(sql, dict(cc=cc, cc_low=cc.lower()))
     entries = tuple(q.fetchall())
     log.info("%d entries", len(entries))
+    return entries
 
-    # Fetch url priorities rules
+
+@metrics.timer("fetch_prioritization_rules")
+def fetch_prioritization_rules(cc: str) -> list:
     sql = """SELECT category_code, cc, domain, url, priority
     FROM url_priorities WHERE cc = :cc OR cc = '*'
     """
+    log = current_app.logger
     q = current_app.db_session.execute(sql, dict(cc=cc))
     prio_rules = tuple(q.fetchall())
     log.info("%d priority entries", len(prio_rules))
-
-    # Order based on (msmt_cnt / priority) to provide balancing
-    test_list = []
-    for e in entries:
-        # Calculate priority for an URL
-        priority = 0
-        for pr in prio_rules:
-            if match_prio_rule(e, pr):
-                priority += pr["priority"]
-
-        o = dict(e)
-        o["priority"] = priority
-        o["weight"] =  priority / max(e["msmt_cnt"], 0.1)
-        test_list.append(o)
-
-    test_list = sorted(test_list, key=lambda k: k["weight"], reverse=True)
-    return test_list
+    return prio_rules
 
 
 @metrics.timer("generate_test_list")
@@ -182,10 +184,15 @@ def generate_test_list(
 ):
     """Generate test list based on the amount of measurements in the last
     N days"""
+    entries = fetch_reactive_url_list(country_code)
+    prio_rules = fetch_prioritization_rules(country_code)
+    li = compute_priorities(entries, prio_rules)
+    # Filter unwanted category codes, replace ZZ, trim priority <= 0
     out = []
-    li = fetch_reactive_url_list(country_code)
     for entry in li:
         if category_codes and entry["category_code"] not in category_codes:
+            continue
+        if entry["priority"] <= 0:
             continue
 
         cc = "XX" if entry["cc"] == "ZZ" else entry["cc"].upper()
