@@ -133,6 +133,10 @@ def test_check_in(client, mocks):
     )
     c = postj(client, "/api/v1/check-in", **j)
     assert c["v"] == 1
+    assert c["utc_time"].startswith("20")
+    assert c["utc_time"].endswith("Z")
+    assert "T" in c["utc_time"]
+    assert len(c["utc_time"]) == 20
     urls = c["tests"]["web_connectivity"]["urls"]
     assert len(urls) == 20, urls
 
