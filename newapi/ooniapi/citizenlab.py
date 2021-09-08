@@ -742,10 +742,12 @@ def list_url_priorities():
     log = current_app.logger
     log.debug("listing URL prio rules")
     query = """SELECT category_code, cc, domain, url, priority
-    FROM url_priorities"""
+    FROM url_priorities
+    ORDER BY 2, 1, 3, 4
+    """
     q = current_app.db_session.execute(query)
-    row = [dict(r) for r in q]
-    return make_response(jsonify(rules=row))
+    rows = [dict(r) for r in q]
+    return make_response(jsonify(rules=rows))
 
 
 @cz_blueprint.route("/api/_/url-priorities/update", methods=["POST"])
