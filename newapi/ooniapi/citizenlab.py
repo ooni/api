@@ -190,7 +190,7 @@ class URLListManager:
         """
         apiurl = self.get_pr_id(account_id)
         pr_num = apiurl.split("/")[-1]
-        return f"https://github.com/{self.push_repo}/pull/{pr_num}"
+        return f"https://github.com/{self.origin_repo}/pull/{pr_num}"
 
     def get_user_repo(self, account_id: str):
         repo_path = self.get_user_repo_path(account_id)
