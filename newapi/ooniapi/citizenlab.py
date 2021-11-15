@@ -368,7 +368,7 @@ class URLListManager:
         https://api.github.com/repos/citizenlab/test-lists/pulls/800
         """
         head = f"{self.push_username}:{branchname}"
-        log.info(f"opening a PR for {head} on {self.origin_repo}")
+        log.info(f"opening a PR for {head} on {self.origin_repo} using {self.push_repo}")
         auth = HTTPBasicAuth(self.github_user, self.github_token)
         apiurl = f"https://api.github.com/repos/{self.origin_repo}/pulls"
         r = requests.post(
