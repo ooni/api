@@ -8,6 +8,7 @@ from datetime import date, timedelta
 from textwrap import dedent
 from subprocess import PIPE
 from pathlib import Path
+from urllib.parse import urlparse
 
 import flask
 
@@ -144,7 +145,8 @@ def run_pg_sql_scripts(app):
 
 
 def run_clickhouse_sql_scripts(app):
-    clickhouse_host = app.config["CLICKHOUSE_HOST"]
+    clickhouse_url = app.config["CLICKHOUSE_URL"]
+    clickhouse_host = urlparse(clickhouse_url).hostname
     assert clickhouse_host
     for fn in ["1_schema", "2_fixtures"]:
         fn = f"tests/integ/clickhouse_{fn}.sql"
@@ -217,7 +219,8 @@ def setup_database_part_2(setup_database_part_1, app, checkout_pipeline):
         print("Refusing to make changes on metadb!")
         sys.exit(1)
 
-    clickhouse_host = app.config["CLICKHOUSE_HOST"]
+    clickhouse_url = app.config["CLICKHOUSE_URL"]
+    clickhouse_host = urlparse(clickhouse_url).hostname
     assert clickhouse_host in ("localhost", "clickhouse")
 
     log = app.logger
