@@ -177,7 +177,7 @@ def _run_fastpath(fpdir, dburi, start, end, limit):
     subprocess.run(cmd, check=True, cwd=fpdir)
 
 
-def run_fastpath(log, pipeline_dir, dburi, clickhouse_host):
+def run_fastpath(log, pipeline_dir, dburi, clickhouse_url):
     """Run fastpath from S3"""
     fpdir = pipeline_dir / "af" / "fastpath"
     conffile = fpdir / "etc/ooni/fastpath.conf"
@@ -186,7 +186,7 @@ def run_fastpath(log, pipeline_dir, dburi, clickhouse_host):
         [DEFAULT]
         collectors = localhost
         db_uri = {dburi}
-        clickhouse_host = {clickhouse_host}
+        clickhouse_url = {clickhouse_url}
         s3_access_key =
         s3_secret_key =
     """
@@ -220,13 +220,12 @@ def setup_database_part_2(setup_database_part_1, app, checkout_pipeline):
         sys.exit(1)
 
     clickhouse_url = app.config["CLICKHOUSE_URL"]
-    clickhouse_host = urlparse(clickhouse_url).hostname
-    assert clickhouse_host in ("localhost", "clickhouse")
+    assert any([x in clickhouse_url for x in ("localhost", "clickhouse")])
 
     log = app.logger
     # run_pg_sql_scripts(app)
     run_clickhouse_sql_scripts(app)
-    run_fastpath(log, checkout_pipeline, dburi, clickhouse_host)
+    run_fastpath(log, checkout_pipeline, dburi, clickhouse_url)
 
 
 @pytest.fixture(autouse=True, scope="session")
