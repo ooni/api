@@ -14,6 +14,8 @@ import ujson
 from flask import Blueprint, current_app, request, make_response
 from flask.json import jsonify
 
+import geoip2.database # debdeps: python3-geoip2
+
 import jwt.exceptions  # debdeps: python3-jwt
 
 from ooniapi.config import metrics
@@ -40,6 +42,27 @@ def generate_report_id(test_name, cc: str, asn_i: int) -> str:
     rid = f"{ts}_{test_name}_{cc}_{asn_i}_n{cid}_{rand}"
     return rid
 
+
+def get_probe_ip() -> str:
+    real_ip_headers = [
+        "X-Forwarded-For",
+        "X-Real-IP"
+    ]
+    for h in real_ip_headers:
+        if h in request.headers:
+            return request.headers.getlist(h)[0].rpartition(' ')[-1]
+
+    return request.remote_addr
+
+def lookup_probe_asn(ip: str) -> str:
+    with geoip2.database.Reader(current_app.config["GEOIP_ASN_DB"]) as reader:
+        resp = reader.asn(ip)
+        return "AS{}".format(resp.autonomous_system_number)
+
+def lookup_probe_cc(ip: str) -> str:
+    with geoip2.database.Reader(current_app.config["GEOIP_CC_DB"]) as reader:
+        resp = reader.country(ip)
+        return resp.country.iso_code
 
 @probe_services_blueprint.route("/api/v1/check-in", methods=["POST"])
 def check_in():
@@ -142,6 +165,17 @@ def check_in():
     run_type = data.get("run_type", "timed")
     charging = data.get("charging", True)
 
+    resp = dict(
+        v=1
+    )
+
+    if probe_cc == "ZZ" and asn == "AS0":
+        probe_ip = get_probe_ip()
+        probe_cc = lookup_probe_cc(probe_ip)
+        asn = lookup_probe_asn(probe_ip)
+        resp["probe_cc"] = probe_cc
+        resp["probe_asn"] = asn
+
     # When the run_type is manual we want to preserve the
     # old behavior where we test the whole list. Otherwise,
     # we're running in the background and we don't want
@@ -186,15 +220,11 @@ def check_in():
         log.error(str(e), exc_info=1)
         conf = {}
 
-    utc_time = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-    resp = dict(
-        v=1,
-        tests={
-            "web_connectivity": {"urls": test_items},
-        },
-        conf=conf,
-        utc_time=utc_time,
-    )
+    resp["tests"] = {
+        "web_connectivity": {"urls": test_items},
+    }
+    resp["conf"] = conf
+    resp["utc_time"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # get asn, asn_i, probe_cc, network name
     test_names = (
