@@ -11,6 +11,8 @@ from flask import Flask, json
 
 from flask_cors import CORS  # debdeps: python3-flask-cors
 
+import geoip2.database # debdeps: python3-geoip2
+
 # python3-flask-cors has unnecessary dependencies :-/
 from ooniapi.rate_limit_quotas import FlaskLimiter
 
@@ -151,6 +153,9 @@ def init_app(app, testmode=False):
     log.info("Configuration loaded")
     CORS(app)
 
+    # Setup readers for the geoip database
+    app.geoip_cc_reader = geoip2.database.Reader(app.config["GEOIP_CC_DB"])
+    app.geoip_asn_reader = geoip2.database.Reader(app.config["GEOIP_ASN_DB"])
 
 def create_app(*args, testmode=False, **kw):
     from ooniapi import views

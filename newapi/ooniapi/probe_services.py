@@ -14,8 +14,6 @@ import ujson
 from flask import Blueprint, current_app, request, make_response
 from flask.json import jsonify
 
-import geoip2.database # debdeps: python3-geoip2
-
 import jwt.exceptions  # debdeps: python3-jwt
 
 from ooniapi.config import metrics
@@ -55,14 +53,12 @@ def get_probe_ipaddr() -> str:
     return request.remote_addr
 
 def lookup_probe_asn(ipaddr: str) -> str:
-    with geoip2.database.Reader(current_app.config["GEOIP_ASN_DB"]) as reader:
-        resp = reader.asn(ipaddr)
-        return "AS{}".format(resp.autonomous_system_number)
+    resp = current_app.geoip_asn_reader.asn(ipaddr)
+    return "AS{}".format(resp.autonomous_system_number)
 
 def lookup_probe_cc(ipaddr: str) -> str:
-    with geoip2.database.Reader(current_app.config["GEOIP_CC_DB"]) as reader:
-        resp = reader.country(ipaddr)
-        return resp.country.iso_code
+    resp = current_app.geoip_cc_reader.country(ipaddr)
+    return resp.country.iso_code
 
 @probe_services_blueprint.route("/api/v1/check-in", methods=["POST"])
 def check_in():
