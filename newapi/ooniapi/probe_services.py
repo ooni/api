@@ -43,7 +43,7 @@ def generate_report_id(test_name, cc: str, asn_i: int) -> str:
     return rid
 
 
-def get_probe_ip() -> str:
+def get_probe_ipaddr() -> str:
     real_ip_headers = [
         "X-Forwarded-For",
         "X-Real-IP"
@@ -54,14 +54,14 @@ def get_probe_ip() -> str:
 
     return request.remote_addr
 
-def lookup_probe_asn(ip: str) -> str:
+def lookup_probe_asn(ipaddr: str) -> str:
     with geoip2.database.Reader(current_app.config["GEOIP_ASN_DB"]) as reader:
-        resp = reader.asn(ip)
+        resp = reader.asn(ipaddr)
         return "AS{}".format(resp.autonomous_system_number)
 
-def lookup_probe_cc(ip: str) -> str:
+def lookup_probe_cc(ipaddr: str) -> str:
     with geoip2.database.Reader(current_app.config["GEOIP_CC_DB"]) as reader:
-        resp = reader.country(ip)
+        resp = reader.country(ipaddr)
         return resp.country.iso_code
 
 @probe_services_blueprint.route("/api/v1/check-in", methods=["POST"])
@@ -170,11 +170,14 @@ def check_in():
     )
 
     if probe_cc == "ZZ" and asn == "AS0":
-        probe_ip = get_probe_ip()
-        probe_cc = lookup_probe_cc(probe_ip)
-        asn = lookup_probe_asn(probe_ip)
-        resp["probe_cc"] = probe_cc
-        resp["probe_asn"] = asn
+        try:
+            ipaddr = get_probe_ipaddr()
+            probe_cc = lookup_probe_cc(ipaddr)
+            asn = lookup_probe_asn(ipaddr)
+            resp["probe_cc"] = probe_cc
+            resp["probe_asn"] = asn
+        except Exception as e:
+            log.error(str(e), exc_info=1)
 
     # When the run_type is manual we want to preserve the
     # old behavior where we test the whole list. Otherwise,
