@@ -35,6 +35,7 @@ apt-get install --no-install-recommends -qy \
   python3-flask-cors \
   python3-flask-restful \
   python3-freezegun \
+  python3-geoip2 \
   python3-git \
   python3-jwt \
   python3-lz4 \
