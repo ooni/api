@@ -25,6 +25,7 @@ apt-get update
 # Keep this in sync with debian/control
 # hint: grep debdeps **/*.py
 apt-get install --no-install-recommends -qy \
+  curl \
   git \
   gunicorn3 \
   python3-boto3 \
