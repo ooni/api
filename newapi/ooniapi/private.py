@@ -114,6 +114,7 @@ def api_private_test_names():
       '200':
         description: TODO
     """
+    # TODO: merge this and models.py:TEST_GROUPS
     TEST_NAMES = {
         "bridge_reachability": "Bridge Reachability",
         "dash": "DASH",
@@ -130,6 +131,7 @@ def api_private_test_names():
         "psiphon": "Psiphon",
         "riseupvpn": "RiseupVPN",
         "signal": "Signal",
+        "stunreachability": "STUN Reachability",
         "tcp_connect": "TCP Connect",
         "telegram": "Telegram",
         "tor": "Tor",
