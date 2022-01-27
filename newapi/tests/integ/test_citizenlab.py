@@ -265,7 +265,9 @@ def _test_checkout_update_submit(client, tmp_path):
     r = client.post("/api/v1/url-submission/submit")
     assert r.status_code == 200
 
-    assert get_state(client) == "PR_OPEN"
+    # This is clean, because we are mocking the is_pr_resolved request, making
+    # the test client believe that the PR has been merged.
+    assert get_state(client) == "CLEAN"
 
 
 def test_checkout_update_submit(
