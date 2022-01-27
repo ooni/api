@@ -43,13 +43,7 @@ def test_no_auth(client):
 def list_global(client, usersession):
     r = client.get("/api/v1/url-submission/test-list/global")
     assert r.status_code == 200
-    assert r.json[0] == {
-        "url": "https://2600.org/",
-        "category_code": "HACK",
-        "date_added": "2014-04-15",
-        "source": "citizenlab",
-        "notes": "Updated by OONI on 2017-02-14",
-    }
+    assert r.json[0].keys() == {"url", "category_code", "date_added", "source", "notes"}
     assert len(r.json) > 1000
 
 
