@@ -41,7 +41,7 @@ def generate_report_id(test_name, cc: str, asn_i: int) -> str:
     return rid
 
 
-def get_probe_ipaddr() -> str:
+def extract_probe_ipaddr() -> str:
     real_ip_headers = [
         "X-Forwarded-For",
         "X-Real-IP"
@@ -167,7 +167,7 @@ def check_in():
 
     if probe_cc == "ZZ" and asn == "AS0":
         try:
-            ipaddr = get_probe_ipaddr()
+            ipaddr = extract_probe_ipaddr()
             probe_cc = lookup_probe_cc(ipaddr)
             asn = lookup_probe_asn(ipaddr)
             resp["probe_cc"] = probe_cc
