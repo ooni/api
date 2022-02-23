@@ -154,6 +154,8 @@ def init_app(app, testmode=False):
     CORS(app)
 
     # Setup readers for the geoip database
+    # Note: code related to geoip reading is not yet ready to be deployed in
+    # production.
     try:
         app.geoip_cc_reader = geoip2.database.Reader(app.config["GEOIP_CC_DB"])
         app.geoip_asn_reader = geoip2.database.Reader(app.config["GEOIP_ASN_DB"])
