@@ -461,8 +461,9 @@ def list_test_helpers():
         ],
     }
     probe_ipaddr = request.headers.get("X-Real-Ip", "")
-    if probe_ipaddr.startswith("2.34."):
-        # Temporary hack to match 2.34.0.0/16 announced by AS30722
+    if probe_ipaddr.startswith("2"):
+        metrics.incr("test_helper_new")
+        # Temporary hack to provide new test helpers
         j["web-connectivity"] = [
             {"address": "https://0.th.ooni.org", "type": "https"},
             {
@@ -471,6 +472,8 @@ def list_test_helpers():
                 "type": "cloudfront",
             },
         ]
+    else:
+        metrics.incr("test_helper_old")
     return cachedjson(0, **j)
 
 
