@@ -466,6 +466,7 @@ def list_test_helpers():
         # Temporary hack to provide new test helpers
         j["web-connectivity"] = [
             {"address": "https://0.th.ooni.org", "type": "https"},
+            {"address": "https://1.th.ooni.org", "type": "https"},
             {
                 "address": "https://d33d1gs9kpq1c5.cloudfront.net",
                 "front": "d33d1gs9kpq1c5.cloudfront.net",
