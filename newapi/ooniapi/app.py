@@ -161,7 +161,7 @@ def init_app(app, testmode=False):
         app.geoip_asn_reader = geoip2.database.Reader(app.config["GEOIP_ASN_DB"])
     except Exception as exc:
         log.error("Failed to load geoip databases at paths",
-                app.config["GEOIP_CC_DB"], app.config["GEOIP_ASN_DB")
+                app.config["GEOIP_CC_DB"], app.config["GEOIP_ASN_DB"])
         raise exc
 
 def create_app(*args, testmode=False, **kw):
