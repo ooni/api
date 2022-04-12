@@ -165,15 +165,33 @@ def check_in():
         v=1
     )
 
+    db_probe_cc = "ZZ"
+    db_asn = "AS0"
+    try:
+        ipaddr = extract_probe_ipaddr()
+        db_probe_cc = lookup_probe_cc(ipaddr)
+        db_asn = lookup_probe_asn(ipaddr)
+    except Exception as e:
+        log.error(str(e), exc_info=1)
+
+    if probe_cc != "ZZ" and probe_cc != db_probe_cc:
+            log.warn(f"probe_cc != db_probe_cc ({probe_cc} != {db_probe_cc})")
+    if asn != "AS0" and asn != db_asn:
+            log.warn(f"probe_asn != db_probe_as ({asn} != {db_asn})")
+
+    # We always returns the looked up probe_cc and probe_asn to the probe
+    resp["probe_cc"] = db_probe_cc
+    resp["probe_asn"] = db_asn
+
+    # We don't override the probe_cc or asn, unless the probe has omitted these
+    # values.  This is done, because the IP address we see might not match the
+    # actual probe IP in cases in which a circumvention tool is being used.
+    # TODO: eventually we should have the probe signal to the backend that it
+    # wants the lookup to be done by the backend and have it pass the public IP
+    # through a specific header.
     if probe_cc == "ZZ" and asn == "AS0":
-        try:
-            ipaddr = extract_probe_ipaddr()
-            probe_cc = lookup_probe_cc(ipaddr)
-            asn = lookup_probe_asn(ipaddr)
-            resp["probe_cc"] = probe_cc
-            resp["probe_asn"] = asn
-        except Exception as e:
-            log.error(str(e), exc_info=1)
+        probe_cc = db_probe_cc
+        asn = db_asn
 
     # When the run_type is manual we want to preserve the
     # old behavior where we test the whole list. Otherwise,
