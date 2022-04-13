@@ -1108,8 +1108,10 @@ def get_aggregated():
             sql.table("citizenlab"),
             sql.text("citizenlab.url = counters.input"),
         )
-        where.append(sql.text("category_code = :category_code"))
+        where.append(sql.text("citizenlab.category_code = :category_code"))
+        where.append(sql.text("citizenlab.cc = 'ZZ' OR citizenlab.cc = :lowcc"))
         query_params["category_code"] = category_code
+        query_params["lowcc"] = probe_cc.lower()
 
     if probe_cc:
         where.append(sql.text("probe_cc = :probe_cc"))
@@ -1244,7 +1246,7 @@ def get_torsf_stats():
         column("probe_cc"),
         coalsum("anomaly_count"),
         coalsum("failure_count"),
-        coalsum("measurement_count")
+        coalsum("measurement_count"),
     ]
     table = sql.table("counters")
     where = [sql.text("test_name = 'torsf'")]
@@ -1263,7 +1265,7 @@ def get_torsf_stats():
         until = parse_date(until)
         where.append(sql.text("measurement_start_day <= :until"))
         query_params["until"] = until
-        cacheable = (until < datetime.now() - timedelta(hours=72))
+        cacheable = until < datetime.now() - timedelta(hours=72)
 
     # Assemble query
     where_expr = and_(*where)
