@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: test
       POSTGRES_DB: oonitestdb
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "postgres"]
+      test: ["CMD", "pg_isready"]
 
   api:
     restart: always
