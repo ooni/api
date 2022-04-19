@@ -9,20 +9,18 @@ services:
       POSTGRES_USER: oonitest
       POSTGRES_PASSWORD: test
       POSTGRES_DB: oonitestdb
-    volumes:
-      # ssh ams-pg.ooni.org -t pg_dump metadb -U shovel --schema-only > scripts/2_metadb_schema.sql
-      - ./newapi/tests/integ/1_metadb_users.sql:/docker-entrypoint-initdb.d/1_metadb_users.sql
-      - ./newapi/tests/integ/2_metadb_schema.sql:/docker-entrypoint-initdb.d/2_metadb_schema.sql
-      - ./newapi/tests/integ/3_test_fixtures.sql:/docker-entrypoint-initdb.d/3_test_fixtures.sql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "postgres"]
 
   api:
     restart: always
     build:
       context: .
-    command: gunicorn3 --reuse-port ooniapi.wsgi --statsd-host 127.0.0.1:8125
+    command: gunicorn3 --reuse-port ooniapi.wsgi -b 0.0.0.0:8000
     volumes:
       - ./newapi/:/app
     ports:
       - "8000:8000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
