@@ -22,7 +22,7 @@ services:
     volumes:
       - ./data/clickhouse/data:/var/lib/clickhouse
     healthcheck:
-      test: ["CMD", "curl", "http://127.0.0.1:8123/ping"]
+      test: ["CMD", "wget", "-q", "http://127.0.0.1:8123/ping"]
 
   api:
     restart: always
