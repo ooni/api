@@ -2,7 +2,7 @@
 
 -- Main tables
 
-CREATE TABLE default.fastpath
+CREATE TABLE IF NOT EXISTS default.fastpath
 (
     `measurement_uid` String,
     `report_id` String,
@@ -34,7 +34,7 @@ ENGINE = ReplacingMergeTree
 ORDER BY (measurement_start_time, report_id, input)
 SETTINGS index_granularity = 8192;
 
-CREATE TABLE default.jsonl
+CREATE TABLE IF NOT EXISTS default.jsonl
 (
     `report_id` String,
     `input` String,
@@ -46,7 +46,7 @@ ENGINE = MergeTree
 ORDER BY (report_id, input)
 SETTINGS index_granularity = 8192;
 
-CREATE TABLE default.url_priorities (
+CREATE TABLE IF NOT EXISTS default.url_priorities (
     `category_code` String,
     `cc` String,
     `domain` String,
@@ -57,7 +57,7 @@ ENGINE = ReplacingMergeTree
 ORDER BY (category_code, cc, domain, url)
 SETTINGS index_granularity = 8192;
 
-CREATE TABLE default.citizenlab
+CREATE TABLE IF NOT EXISTS default.citizenlab
 (
     `domain` String,
     `url` String,
@@ -68,9 +68,9 @@ ENGINE = ReplacingMergeTree
 ORDER BY (domain, url, cc, category_code)
 SETTINGS index_granularity = 4;
 
-CREATE TABLE default.citizenlab_flip AS default.citizenlab;
+CREATE TABLE IF NOT EXISTS default.citizenlab_flip AS default.citizenlab;
 
-CREATE TABLE test_groups (
+CREATE TABLE IF NOT EXISTS test_groups (
   `test_name` String,
   `test_group` String
 )
@@ -79,7 +79,7 @@ ENGINE = Join(ANY, LEFT, test_name);
 
 -- Auth
 
-CREATE TABLE accounts
+CREATE TABLE IF NOT EXISTS accounts
 (
     `account_id` FixedString(32),
     `role` String
@@ -87,7 +87,7 @@ CREATE TABLE accounts
 ENGINE = EmbeddedRocksDB
 PRIMARY KEY account_id;
 
-CREATE TABLE session_expunge
+CREATE TABLE IF NOT EXISTS session_expunge
 (
     `account_id` FixedString(32),
     `threshold` DateTime DEFAULT now()
@@ -97,7 +97,7 @@ PRIMARY KEY account_id;
 
 -- Materialized views
 
-CREATE MATERIALIZED VIEW default.counters_test_list
+CREATE MATERIALIZED VIEW IF NOT EXISTS default.counters_test_list
 (
     `day` DateTime,
     `probe_cc` String,
@@ -121,7 +121,7 @@ GROUP BY
     probe_cc,
     input;
 
-CREATE MATERIALIZED VIEW default.counters_asn_test_list
+CREATE MATERIALIZED VIEW IF NOT EXISTS default.counters_asn_test_list
 (
     `week` DateTime,
     `probe_cc` String,
