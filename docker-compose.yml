@@ -21,6 +21,8 @@ services:
       - "9000:9000"
     volumes:
       - ./data/clickhouse/data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "curl", "http://127.0.0.1:8123/ping"]
 
   api:
     restart: always
@@ -34,4 +36,5 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      clickhouse
+      clickhouse:
+        condition: service_healthy
