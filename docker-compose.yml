@@ -12,6 +12,16 @@ services:
     healthcheck:
       test: ["CMD", "pg_isready"]
 
+  clickhouse:
+    image: yandex/clickhouse-server:21.8.8
+    hostname: clickhouse
+    container_name: clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - ./data/clickhouse/data:/var/lib/clickhouse
+
   api:
     restart: always
     build:
@@ -24,3 +34,4 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      clickhouse
