@@ -158,7 +158,7 @@ def run_clickhouse_sql_scripts(app):
             fn,
         ]
         app.logger.info(f"Running {fn} on Clickhouse")
-        app.loggr.info("Running " + " ".join(cmd))
+        app.logger.info("Running " + " ".join(cmd))
         r = subprocess.run(cmd, capture_output=True, timeout=5)
         if r.returncode:
             msg = "ERROR running clickhouse-client"
@@ -184,7 +184,7 @@ def run_fastpath(log, pipeline_dir, dburi, clickhouse_host):
         [DEFAULT]
         collectors = localhost
         db_uri = {dburi}
-        clickhouse_host = {clickhouse_host}
+        clickhouse_url = clickhouse://{clickhouse_host}
         s3_access_key =
         s3_secret_key =
     """
