@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND noninteractive
 
 RUN mkdir /scripts
 COPY newapi/build_runner.sh /scripts
-COPY newapi/download_geoip.sh /scripts
+COPY newapi/debian/ooni_download_geoip.sh /scripts
 COPY newapi/api.conf.example /scripts
 WORKDIR /scripts
 
@@ -13,7 +13,7 @@ WORKDIR /scripts
 RUN ./build_runner.sh
 
 # Download geoip files
-RUN ./download_geoip.sh
+RUN ./ooni_download_geoip.sh
 
 RUN rm -rf /scripts
 
