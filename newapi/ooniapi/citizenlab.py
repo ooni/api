@@ -303,14 +303,20 @@ class URLListManager:
         if len(cc) != 2 and cc != "global":
             raise Exception("Invalid country code")
 
-        self.sync_state(account_id)
-        self.pull_origin_repo()
-        state = self.get_state(account_id)
-        if state in ("PR_OPEN"):
-            raise Exception("Your changes are being reviewed. Please wait.")
-
         if old_entry == new_entry:
             raise Exception("No change is being made.")
+
+        self.pull_origin_repo()
+        self.sync_state(account_id)
+        state = self.get_state(account_id)
+        if state in ("PR_OPEN"):
+            try:
+                self.close_pr(account_id)
+            except AssertionError:
+                # This might happen due to a race between the PR being closed
+                # and it being merged upstream
+                raise Exception("Unable to close PR")
+            self.set_state(account_id, "IN_PROGRESS")
 
         repo = self.get_user_repo(account_id)
         with self.get_user_lock(account_id):
@@ -390,6 +396,22 @@ class URLListManager:
         except KeyError:
             log.error(f"Failed to retrieve URL for the PR {j}")
             raise
+
+    def close_pr(self, account_id):
+        pr_id = self.get_pr_id(account_id)
+        assert pr_id.startswith("https"), f"{pr_id} doesn't start with https"
+        log.info(
+            f"closing PR {pr_id}"
+        )
+        auth = HTTPBasicAuth(self.github_user, self.github_token)
+        r = requests.patch(
+            pr_id,
+            json={
+                "state": "closed"
+            },
+            auth=auth
+        )
+        assert r.status_code == 200
 
     def is_pr_resolved(self, account_id) -> bool:
         """Raises if the PR was never opened"""

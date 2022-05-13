@@ -201,28 +201,53 @@ def test_pr_state(client, usersession):
 # # Tests with mocked-out GitHub # #
 
 
-class MK:
+class MKOpen:
+    status_code = 200
+
+    @staticmethod
+    def json():  # mock both openin a pr or checking its status
+        return {"state": "open", "url": "https://testurl"}
+
+class MKClosed:
+    status_code = 200
+
     @staticmethod
     def json():  # mock both openin a pr or checking its status
         return {"state": "closed", "url": "https://testurl"}
 
-
 @pytest.fixture
-def mock_requests(monkeypatch):
+def mock_requests_open(monkeypatch):
     def req(*a, **kw):
         print(a)
         print(kw)
-        return MK()
+        return MKOpen()
 
     def push(*a, **kw):
         print(a)
         print(kw)
-        return MK()
+        return MKOpen()
 
     monkeypatch.setattr(ooniapi.citizenlab.URLListManager, "push_to_repo", push)
     monkeypatch.setattr(ooniapi.citizenlab.requests, "post", req)
+    monkeypatch.setattr(ooniapi.citizenlab.requests, "patch", req)
     monkeypatch.setattr(ooniapi.citizenlab.requests, "get", req)
 
+@pytest.fixture
+def mock_requests_closed(monkeypatch):
+    def req(*a, **kw):
+        print(a)
+        print(kw)
+        return MKClosed()
+
+    def push(*a, **kw):
+        print(a)
+        print(kw)
+        return MKClosed()
+
+    monkeypatch.setattr(ooniapi.citizenlab.URLListManager, "push_to_repo", push)
+    monkeypatch.setattr(ooniapi.citizenlab.requests, "post", req)
+    monkeypatch.setattr(ooniapi.citizenlab.requests, "patch", req)
+    monkeypatch.setattr(ooniapi.citizenlab.requests, "get", req)
 
 @pytest.fixture
 def clean_workdir(app, tmp_path):
@@ -272,7 +297,7 @@ def _test_checkout_update_submit(client, tmp_path):
 
 
 def test_checkout_update_submit(
-    clean_workdir, client, usersession, mock_requests, tmp_path
+    clean_workdir, client, usersession, mock_requests_closed, tmp_path
 ):
     _test_checkout_update_submit(client, tmp_path)
 
@@ -280,6 +305,29 @@ def test_checkout_update_submit(
     # (it is) and set the state to CLEAN
     list_global(client, usersession)
     assert get_state(client) == "CLEAN"
+
+def test_propose_changes_then_update(
+    clean_workdir, client, usersession, mock_requests_open, tmp_path
+):
+    assert get_state(client) == "CLEAN"
+
+    url = "https://example-bogus-1.org/"
+    add_url(client, usersession, url, tmp_path)
+    assert get_state(client) == "IN_PROGRESS"
+
+    r = client.post("/api/v1/url-submission/submit")
+    assert r.status_code == 200
+
+    assert get_state(client) == "PR_OPEN"
+
+    url = "https://example-bogus-2.org/"
+    add_url(client, usersession, url, tmp_path)
+    assert get_state(client) == "IN_PROGRESS"
+
+    r = client.post("/api/v1/url-submission/submit")
+    assert r.status_code == 200
+
+    assert get_state(client) == "PR_OPEN"
 
 
 # # Tests with real GitHub # #
