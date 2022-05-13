@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import shutil
+import json
 
 from requests.auth import HTTPBasicAuth
 from filelock import FileLock  # debdeps: python3-filelock
@@ -82,8 +83,113 @@ CATEGORY_CODES = {
     "MISC": "Miscelaneous content",
 }
 
+CITIZENLAB_CSV_HEADER = (
+    "url",
+    "category_code",
+    "category_description",
+    "date_added",
+    "source",
+    "notes",
+)
 
-def jerror(msg, code=400):
+class BaseOONIException(HTTPException):
+    code: int = 400
+    err_str: str = "err_generic_ooni_exception"
+    err_args: Optional[Dict[str, str]] = None
+    description: str = "Generic OONI error"
+
+    def __init__(
+        self,
+        description: Optional[str] = None,
+        err_args: Optional[Dict[str, str]] = None,
+    ):
+        super().__init__(description=description)
+        if err_args is not None:
+            self.err_args = err_args
+
+
+class BadURL(BaseOONIException):
+    code = 400
+    err_str = "err_bad_url"
+    description = "Invalid URL"
+
+
+class BadCategoryCode(BaseOONIException):
+    code = 400
+    err_str = "err_bad_category_code"
+    description = "Invalid category code"
+
+
+class BadCategoryDescription(BaseOONIException):
+    code = 400
+    err_str = "err_bad_category_description"
+    description = "Invalid category description"
+
+
+class BadDate(BaseOONIException):
+    code = 400
+    err_str = "err_bad_date"
+    description = "Invalid date"
+
+
+class CountryNotSupported(BaseOONIException):
+    code = 400
+    err_str = "err_country_not_supported"
+    description = "Country Not Supported"
+
+
+class InvalidCountryCode(BaseOONIException):
+    code = 400
+    err_str = "err_invalid_country_code"
+    description = "Country code is invalid"
+
+
+class DuplicateURLError(BaseOONIException):
+    code = 400
+    err_str = "err_duplicate_url"
+    description = "Duplicate URL"
+
+
+class DuplicateRuleError(BaseOONIException):
+    code = 400
+    err_str = "err_duplicate_rule"
+    description = "Duplicate rule"
+
+
+class RuleNotFound(BaseOONIException):
+    code = 404
+    err_str = "err_rule_not_found"
+    description = "Rule not found error"
+
+
+class CannotClosePR(BaseOONIException):
+    code = 400
+    err_str = "err_cannot_close_pr"
+    description = "Unable to close PR. Please reload data."
+
+
+class CannotUpdateList(BaseOONIException):
+    code = 400
+    err_str = "err_cannot_update_list"
+    description = "Unable to update. The URL list has changed in the meantime."
+
+
+class NoProposedChanges(BaseOONIException):
+    code = 400
+    err_str = "err_no_proposed_changes"
+    description = "No changes are being proposed"
+
+
+def jerror(err, code=400):
+    if isinstance(err, BaseOONIException):
+        err_j = {
+            "error": err.description,
+            "err_str": err.err_str,
+        }
+        if err.err_args:
+            err_j["err_args"] = err.err_args
+        return make_response(jsonify(err_j), err.code)
+
     return make_response(jsonify(error=msg), code)
 
 
@@ -130,6 +236,9 @@ class URLListManager:
     def get_user_pr_path(self, account_id) -> Path:
         return self.working_dir / "users" / account_id / "pr_id"
 
+    def get_user_changes_path(self, account_id) -> Path:
+        return self.working_dir / "users" / account_id / "changes.pickle"
+
     def get_user_branchname(self, account_id: str) -> str:
         return f"user-contribution/{account_id}"
 
@@ -152,12 +261,6 @@ class URLListManager:
             return self.get_user_statefile_path(account_id).read_text()
         except FileNotFoundError:
             return "CLEAN"
-
-    def get_diff(self, account_id: str):
-        """Returns the git diff"""
-        # FIXME
-        repo = self.get_user_repo(account_id)
-        return repo.index.diff()
 
     def set_state(self, account_id, state: str):
         """
@@ -239,7 +342,9 @@ class URLListManager:
             rows.extend(self.get_test_list(account_id, "global"))
 
         if new_url in (r["url"] for r in rows):
-            raise DuplicateURLError(f"{new_url} is duplicate")
+            raise DuplicateURLError(
+                description=f"{new_url} is duplicate", err_args={"url": new_url}
+            )
 
     def pull_origin_repo(self):
         self.repo.remotes.origin.pull(progress=ProgressPrinter())
@@ -261,36 +366,79 @@ class URLListManager:
                 shutil.rmtree(path)
                 self.repo.git.worktree("prune")
                 self.repo.delete_head(bname, force=True)
+                self.maybe_delete_changes_log(account_id)
             except Exception as e:
                 log.info(f"Error deleting {path} {e}")
 
             self.set_state(account_id, "CLEAN")
 
-    def update(
-        self, account_id: str, cc: str, old_entry: dict, new_entry: dict, comment
+    def maybe_delete_changes_log(self, account_id):
+        changes_log = self.get_user_changes_path(account_id)
+        try:
+            changes_log.unlink()
+        except FileNotFoundError:
+            pass
+
+    def read_changes_log(self, account_id):
+        changes_log = self.get_user_changes_path(account_id)
+        try:
+            with changes_log.open("rb") as in_file:
+                return json.load(in_file)
+        except FileNotFoundError:
+            return {}
+
+    def write_changes_log(
+        self, account_id: str, cc: str, old_entry: dict, new_entry: dict
     ):
-        """Create/update/delete"""
+        changeset = self.read_changes_log(account_id)
+        cc_changeset = changeset.setdefault(cc, [])
+
+        if old_entry:
+            try:
+                changeset[cc].remove(dict(old_entry, **{"action": "add"}))
+            except ValueError:
+                # Not part of the changeset, no problem
+                pass
+
+        if new_entry:
+            # We check if the new_entry we are adding had previously been
+            # deleted. In this case it needs to removed from the log.
+            try:
+                changeset[cc].remove(dict(new_entry, **{"action": "delete"}))
+            except ValueError:
+                pass
+
+            changeset[cc].append(dict(new_entry, **{"action": "add"}))
+
+        elif old_entry:
+            changeset[cc].append(dict(old_entry, **{"action": "delete"}))
+
+        with self.get_user_changes_path(account_id).open("wb") as out_file:
+            json.dump(changeset, out_file)
+
+    def update(
+        self, account_id: str, cc: str, old_entry: dict, new_entry: dict, comment: str
+    ):
+        """
+        Create/update/delete test list entries.
+        """
         # TODO: set date_added to now() on new_entry
         # fields follow the order in the CSV files
-        fields = (
-            "url",
-            "category_code",
-            "category_description",
-            "date_added",
-            "source",
-            "notes",
-        )
         if old_entry:
             old_entry["category_description"] = CATEGORY_CODES[
                 old_entry["category_code"]
             ]
-            assert sorted(old_entry.keys()) == sorted(fields), "Unexpected keys"
+            assert sorted(old_entry.keys()) == sorted(
+                CITIZENLAB_CSV_HEADER
+            ), "Unexpected keys"
 
         if new_entry:
             new_entry["category_description"] = CATEGORY_CODES[
                 new_entry["category_code"]
             ]
-            assert sorted(new_entry.keys()) == sorted(fields), "Unexpected keys"
+            assert sorted(new_entry.keys()) == sorted(
+                CITIZENLAB_CSV_HEADER
+            ), "Unexpected keys"
 
         if old_entry and new_entry:
             log.debug("updating existing entry")
@@ -309,6 +457,16 @@ class URLListManager:
         self.pull_origin_repo()
         self.sync_state(account_id)
         state = self.get_state(account_id)
+
+        # When the PR is open and we are performing an CUD operation, we need
+        # to first close to pull request and restore the state of the users
+        # branch to IN_PROGRESS.
+        # Changes are not pushed directly to the branch, because that increases
+        # the change of github reviewers from merging the PR while the user is
+        # still making changes.
+        # Effectively the PR being openned acts as a lock on the changes for
+        # the user, once the PR is open the lock is acquired, when the PR is
+        # closed, it's released.
         if state in ("PR_OPEN"):
             try:
                 self.close_pr(account_id)
@@ -338,7 +496,7 @@ class URLListManager:
                     out_f,
                     quoting=csv.QUOTE_MINIMAL,
                     lineterminator="\n",
-                    fieldnames=fields,
+                    fieldnames=CITIZENLAB_CSV_HEADER,
                 )
                 writer.writeheader()
 
@@ -367,6 +525,8 @@ class URLListManager:
             tmp_f.rename(csv_f)
             repo.index.add([csv_f.as_posix()])
             repo.index.commit(comment)
+
+            self.write_changes_log(account_id, cc, old_entry, new_entry)
 
             self.set_state(account_id, "IN_PROGRESS")
 
@@ -400,17 +560,9 @@ class URLListManager:
     def close_pr(self, account_id):
         pr_id = self.get_pr_id(account_id)
         assert pr_id.startswith("https"), f"{pr_id} doesn't start with https"
-        log.info(
-            f"closing PR {pr_id}"
-        )
+        log.info(f"closing PR {pr_id}")
         auth = HTTPBasicAuth(self.github_user, self.github_token)
-        r = requests.patch(
-            pr_id,
-            json={
-                "state": "closed"
-            },
-            auth=auth
-        )
+        r = requests.patch(pr_id, json={"state": "closed"}, auth=auth)
         assert r.status_code == 200
 
     def is_pr_resolved(self, account_id) -> bool:
@@ -655,14 +807,15 @@ def get_workflow_state() -> Response:
     return jsonify(state=state)
 
 
-@cz_blueprint.route("/api/v1/url-submission/diff", methods=["GET"])
+@cz_blueprint.route("/api/v1/url-submission/changes", methods=["GET"])
 @role_required(["admin", "user"])
-def get_git_diff() -> Response:
-    """Get changes as a git diff
+def get_changes() -> Response:
+    """Get changes the user has made to the test list so far
     ---
     responses:
       200:
-        description: Git diff
+        description: A dictionary keyed on the country codes with the list of
+            additions and deletions.
         schema:
           type: object
     """
@@ -671,8 +824,8 @@ def get_git_diff() -> Response:
     account_id = get_account_id()
     log.debug("get citizenlab git diff")
     ulm = get_url_list_manager()
-    diff = ulm.get_diff(account_id)
-    return nocachejson(diff=diff)
+    changes = ulm.read_changes_log(account_id)
+    return nocachejson(changes=changes)
 
 
 @cz_blueprint.route("/api/v1/url-submission/submit", methods=["POST"])
