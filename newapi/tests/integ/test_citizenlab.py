@@ -188,12 +188,6 @@ def get_state(client):
     return r.json["state"]
 
 
-def get_diff(client):
-    r = client.get("/api/v1/url-submission/diff")
-    assert r.status_code == 200
-    return r.json["diff"]
-
-
 def test_pr_state(client, usersession):
     assert get_state(client) == "CLEAN"
 
@@ -271,8 +265,6 @@ def _test_checkout_update_submit(client, tmp_path):
     list_global(client, usersession)
     assert get_state(client) == "CLEAN"
 
-    assert get_diff(client) == []
-
     url = "https://example-bogus-1.org/"
     add_url(client, usersession, url, tmp_path)
     assert get_state(client) == "IN_PROGRESS"
@@ -281,7 +273,10 @@ def _test_checkout_update_submit(client, tmp_path):
     assert csv[0] == "url,category_code,category_description,date_added,source,notes"
     assert url in csv[-1], "URL not found in the last line in the CSV file"
 
-    # assert get_diff(client) != []
+    r = client.get("/api/v1/url-submission/changes")
+    assert r.status_code == 200
+
+    assert len(r.json["changes"]["us"]) == 1
 
     add_url(client, usersession, "https://example-bogus.org/", tmp_path)
     lookup_and_delete_us_url(client, usersession, "https://example-bogus.org/")
@@ -295,6 +290,8 @@ def _test_checkout_update_submit(client, tmp_path):
     # the test client believe that the PR has been merged.
     assert get_state(client) == "CLEAN"
 
+    r = client.get("/api/v1/url-submission/changes")
+    assert r.json["changes"] == {}
 
 def test_checkout_update_submit(
     clean_workdir, client, usersession, mock_requests_closed, tmp_path
