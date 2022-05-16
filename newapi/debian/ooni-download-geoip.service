@@ -4,7 +4,7 @@ Wants=ooni-download-geoip.timer
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/ooni_download_geoip.sh
+ExecStart=/usr/bin/ooni_download_geoip.py
 
 [Install]
 WantedBy=multi-user.target
