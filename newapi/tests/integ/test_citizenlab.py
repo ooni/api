@@ -137,7 +137,7 @@ def test_update_url_nochange(client, usersession):
     d = dict(country_code="it", old_entry=old, new_entry=new, comment="")
     r = client.post("/api/v1/url-submission/update-url", json=d)
     assert r.status_code == 400, r.data
-    assert b"No change is" in r.data
+    assert b"err_no_proposed_changes" in r.data
 
 
 # TODO reset git

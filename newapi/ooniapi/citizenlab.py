@@ -5,7 +5,7 @@ Citizenlab CRUD API
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
-from typing import Dict, List
+from typing import Dict, List, Optional
 import csv
 import logging
 import os
@@ -119,66 +119,55 @@ class BadCategoryCode(BaseOONIException):
     err_str = "err_bad_category_code"
     description = "Invalid category code"
 
-
 class BadCategoryDescription(BaseOONIException):
     code = 400
     err_str = "err_bad_category_description"
     description = "Invalid category description"
-
 
 class BadDate(BaseOONIException):
     code = 400
     err_str = "err_bad_date"
     description = "Invalid date"
 
-
 class CountryNotSupported(BaseOONIException):
     code = 400
     err_str = "err_country_not_supported"
     description = "Country Not Supported"
-
 
 class InvalidCountryCode(BaseOONIException):
     code = 400
     err_str = "err_invalid_country_code"
     description = "Country code is invalid"
 
-
 class DuplicateURLError(BaseOONIException):
     code = 400
     err_str = "err_duplicate_url"
     description = "Duplicate URL"
-
 
 class DuplicateRuleError(BaseOONIException):
     code = 400
     err_str = "err_duplicate_rule"
     description = "Duplicate rule"
 
-
 class RuleNotFound(BaseOONIException):
     code = 404
     err_str = "err_rule_not_found"
     description = "Rule not found error"
-
 
 class CannotClosePR(BaseOONIException):
     code = 400
     err_str = "err_cannot_close_pr"
     description = "Unable to close PR. Please reload data."
 
-
 class CannotUpdateList(BaseOONIException):
     code = 400
     err_str = "err_cannot_update_list"
     description = "Unable to update. The URL list has changed in the meantime."
 
-
 class NoProposedChanges(BaseOONIException):
     code = 400
     err_str = "err_no_proposed_changes"
     description = "No changes are being proposed"
-
 
 def jerror(err, code=400):
     if isinstance(err, BaseOONIException):
@@ -190,7 +179,7 @@ def jerror(err, code=400):
             err_j["err_args"] = err.err_args
         return make_response(jsonify(err_j), err.code)
 
-    return make_response(jsonify(error=msg), code)
+    return make_response(jsonify(error=str(err)), code)
 
 
 class ProgressPrinter(git.RemoteProgress):
@@ -312,7 +301,7 @@ class URLListManager:
     def get_test_list(self, account_id, country_code) -> List[Dict[str, str]]:
         country_code = country_code.lower()
         if len(country_code) != 2 and country_code != "global":
-            raise Exception("Invalid country code")
+            raise InvalidCountryCode()
 
         self.sync_state(account_id)
         self.pull_origin_repo()
@@ -343,7 +332,8 @@ class URLListManager:
 
         if new_url in (r["url"] for r in rows):
             raise DuplicateURLError(
-                description=f"{new_url} is duplicate", err_args={"url": new_url}
+                    description=f"{new_url} is duplicate",
+                    err_args={"url": new_url}
             )
 
     def pull_origin_repo(self):
@@ -413,7 +403,7 @@ class URLListManager:
         elif old_entry:
             changeset[cc].append(dict(old_entry, **{"action": "delete"}))
 
-        with self.get_user_changes_path(account_id).open("wb") as out_file:
+        with self.get_user_changes_path(account_id).open("w") as out_file:
             json.dump(changeset, out_file)
 
     def update(
@@ -449,10 +439,10 @@ class URLListManager:
 
         cc = cc.lower()
         if len(cc) != 2 and cc != "global":
-            raise Exception("Invalid country code")
+            raise InvalidCountryCode()
 
         if old_entry == new_entry:
-            raise Exception("No change is being made.")
+            raise NoProposedChanges()
 
         self.pull_origin_repo()
         self.sync_state(account_id)
@@ -473,7 +463,7 @@ class URLListManager:
             except AssertionError:
                 # This might happen due to a race between the PR being closed
                 # and it being merged upstream
-                raise Exception("Unable to close PR")
+                raise CannotClosePR()
             self.set_state(account_id, "IN_PROGRESS")
 
         repo = self.get_user_repo(account_id)
@@ -517,9 +507,8 @@ class URLListManager:
                     done = True
 
             if not done:
-                m = "Unable to update. The URL list has changed in the meantime."
                 tmp_f.unlink()
-                raise Exception(m)
+                raise CannotUpdateList()
 
             log.debug(f"Writing {csv_f.as_posix()}")
             tmp_f.rename(csv_f)
@@ -594,39 +583,6 @@ class URLListManager:
             return pr_id
 
 
-class DuplicateURLError(Exception):
-    pass
-
-
-class DuplicateRuleError(Exception):
-    pass
-
-
-class BadURL(HTTPException):
-    code = 400
-    description = "Invalid URL"
-
-
-class BadCategoryCode(HTTPException):
-    code = 400
-    description = "Invalid category code"
-
-
-class BadCategoryDescription(HTTPException):
-    code = 400
-    description = "Invalid category description"
-
-
-class BadDate(HTTPException):
-    code = 400
-    description = "Invalid date"
-
-
-class CountryNotSupported(HTTPException):
-    code = 400
-    description = "Country Not Supported"
-
-
 def check_url(url):
     if not VALID_URL.match(url):
         raise BadURL()
@@ -698,8 +654,8 @@ def get_test_list(country_code) -> Response:
     try:
         tl = ulm.get_test_list(account_id, country_code)
         return make_response(jsonify(tl))
-    except CountryNotSupported:
-        return jerror("Country not supported")
+    except BaseOONIException as e:
+        return jerror(e)
 
 
 @cz_blueprint.route("/api/v1/url-submission/update-url", methods=["POST"])
@@ -776,11 +732,8 @@ def url_submission_update_url() -> Response:
             comment=rj["comment"],
         )
         return jsonify({"updated_entry": request.json["new_entry"]})
-    except DuplicateURLError as e:
-        return jerror(str(e))
-    except Exception as e:
-        log.info(f"URL submission update error {e}", exc_info=True)
-        return jerror(str(e))
+    except BaseOONIException as e:
+        return jerror(e)
 
 
 @cz_blueprint.route("/api/v1/url-submission/state", methods=["GET"])
@@ -843,8 +796,11 @@ def post_propose_changes() -> Response:
     log.info("submitting citizenlab changes")
     account_id = get_account_id()
     ulm = get_url_list_manager()
-    pr_id = ulm.propose_changes(account_id)
-    return jsonify(pr_id=pr_id)
+    try:
+        pr_id = ulm.propose_changes(account_id)
+        return jsonify(pr_id=pr_id)
+    except BaseOONIException as e:
+        return jerror(e)
 
 
 # # Prioritization management # #
@@ -869,7 +825,10 @@ def list_url_priorities() -> Response:
     # The url_priorities table is CollapsingMergeTree
     q = query_click(sql.text(query), {})
     rows = list(q)
-    return make_response(jsonify(rules=rows))
+    try:
+        return make_response(jsonify(rules=rows))
+    except BaseOONIException as e:
+        return jerror(e)
 
 
 def initialize_url_priorities_if_needed():
@@ -955,7 +914,7 @@ def update_url_priority_click(old: dict, new: dict):
         cnt = query_click_one_row(sql.text(q), new)
         if cnt and cnt["cnt"] > 0:
             log.info(f"Rejecting duplicate rule {new}")
-            raise DuplicateRuleError("Duplicate rule")
+            raise DuplicateRuleError(err_args=new)
 
         rule = new.copy()
         rule["sign"] = 1
@@ -1013,7 +972,7 @@ def post_update_url_priority() -> Response:
     old = request.json.get("old_entry", None)
     new = request.json.get("new_entry", None)
     if not old and not new:
-        return jerror("Pointless update", 400)
+        return jerror(NoProposedChanges())
 
     # Use an explicit marker "*" to represent "match everything" because NULL
     # cannot be used in UNIQUE constraints; also "IS NULL" is difficult to
@@ -1034,5 +993,5 @@ def post_update_url_priority() -> Response:
     try:
         update_url_priority_click(old, new)
         return make_response(jsonify(1))
-    except DuplicateRuleError as e:
-        return jerror(str(e))
+    except BaseOONIException as e:
+        return jerror(e)
