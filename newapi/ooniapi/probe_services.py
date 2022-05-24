@@ -18,7 +18,7 @@ from flask.json import jsonify
 import jwt.exceptions  # debdeps: python3-jwt
 
 from ooniapi.config import metrics
-from ooniapi.utils import cachedjson, nocachejson
+from ooniapi.utils import cachedjson, nocachejson, jer
 
 from ooniapi.auth import create_jwt, decode_jwt
 from ooniapi.prio import generate_test_list
@@ -421,7 +421,7 @@ def probe_login_post() -> Response:
         data = req_json()
     except Exception as e:
         log.error(e)
-        return jerror("JSON expected")
+        return jer("JSONExpected", "JSON expected")
 
     token = data.get("username")
     try:
@@ -430,10 +430,10 @@ def probe_login_post() -> Response:
         log.info("probe login successful")
     except jwt.exceptions.MissingRequiredClaimError:
         log.info("probe login: invalid or missing claim")
-        return jerror("Invalid credentials", code=401)
+        return jer("", "Invalid credentials", 401)
     except jwt.exceptions.InvalidSignatureError:
         log.info("probe login: invalid signature")
-        return jerror("Invalid credentials", code=401)
+        return jer("", "Invalid credentials", 401)
     except jwt.exceptions.DecodeError:
         # Not a JWT token: treat it as a "legacy" login
         # return jerror("Invalid or missing credentials", code=401)
@@ -552,25 +552,25 @@ def _check_probe_token(desc):
     try:
         token = request.headers.get("Authorization")
         if not token.startswith("Bearer "):
-            return jerror("Invalid token format")
+            return jer("", "Invalid token format")
         token = token[7:]
         decode_jwt(token, audience="probe_token")
         return
     except jwt.exceptions.MissingRequiredClaimError:
         log.info(f"{desc}: invalid or missing claim")
-        return jerror("Invalid credentials", code=401)
+        return jer("", "Invalid credentials", 401)
     except jwt.exceptions.InvalidAudienceError:
         log.info(f"{desc}: invalid audience")
-        return jerror("Invalid credentials", code=401)
+        return jer("", "Invalid credentials", 401)
     except jwt.exceptions.InvalidSignatureError:
         log.info(f"{desc}: invalid signature")
-        return jerror("Invalid JWT signature", code=401)
+        return jer("", "Invalid JWT signature", 401)
     except jwt.exceptions.DecodeError:
         log.info(f"{desc}: invalid signature")
-        return jerror("Invalid credentials", code=401)
+        return jer("", "Invalid credentials", 401)
     except Exception as e:
         log.info(str(e), exc_info=True)
-        return jerror(str(e))
+        return jer("UnknownError", "Unknown error {exc}", exc=str(e))
 
 
 def _load_json(path: str) -> dict:
@@ -628,13 +628,9 @@ def serve_tor_targets() -> Response:
 # @probe_services_blueprint.route("/api/private/v1/wcth")
 
 
-def jerror(msg, code=400):
-    return make_response(jsonify(error=msg), code)
-
-
 @probe_services_blueprint.route("/invalidpath")
 def invalidpath() -> Response:
-    return jerror(404, code=404)
+    return make_response(jsonify(error=404), 404)
 
 
 @probe_services_blueprint.route("/bouncer/net-tests", methods=["POST"])
@@ -664,7 +660,7 @@ def bouncer_net_tests() -> Response:
         name = nt["name"]
         version = nt["version"]
     except Exception:
-        return jerror("Malformed request")
+        return jer("", "Malformed request")
 
     j = {
         "net-tests": [
@@ -757,7 +753,7 @@ def open_report() -> Response:
         data = req_json()
     except Exception as e:
         log.error(e)
-        return jerror("JSON expected")
+        return jer("", "JSON expected")
 
     log.info("Open report %r", data)
     asn = data.get("probe_asn", "AS0").upper()
@@ -818,19 +814,19 @@ def receive_measurement(report_id) -> Response:
         rid_timestamp, test_name, cc, asn, format_cid, rand = report_id.split("_")
     except Exception:
         log.info("Unexpected report_id %r", report_id[:200])
-        return jerror("Incorrect format")
+        return jer("", "Incorrect format")
 
     # TODO validate the timestamp?
     good = len(cc) == 2 and test_name.isalnum() and 1 < len(test_name) < 30
     if not good:
         log.info("Unexpected report_id %r", report_id[:200])
-        return jerror("Incorrect format")
+        return jer("", "Incorrect format")
 
     try:
         asn_i = int(asn)
     except ValueError:
         log.info("ASN value not parsable %r", asn)
-        return jerror("Incorrect format")
+        return jer("", "Incorrect format")
 
     if asn_i == 0:
         log.info("Discarding ASN == 0")

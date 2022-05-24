@@ -1,0 +1,112 @@
+[
+  [
+    "RoleNotAuthorized",
+    "Role not authorized",
+    [],
+    "ooniapi/auth.py:role_required"
+  ],
+  [
+    "AuthenticationRequired",
+    "Authentication required",
+    [],
+    "ooniapi/auth.py:role_required"
+  ],
+  [
+    "AuthenticationTokenExpired",
+    "Authentication token expired",
+    [],
+    "ooniapi/auth.py:role_required"
+  ],
+  [
+    "InvalidRequest",
+    "Invalid request",
+    [],
+    "ooniapi/auth.py:user_register"
+  ],
+  [
+    "InvalidEmailAddress",
+    "Invalid email address",
+    [],
+    "ooniapi/auth.py:user_register"
+  ],
+  [
+    "EmailError",
+    "Unable to send the email",
+    [],
+    "ooniapi/auth.py:user_register"
+  ],
+  [
+    "InvalidTokenType",
+    "Invalid token type",
+    [],
+    "ooniapi/auth.py:user_login"
+  ],
+  [
+    "InvalidCredentialSignature",
+    "Invalid credential signature",
+    [],
+    "ooniapi/auth.py:user_login"
+  ],
+  [
+    "InvalidCredentials",
+    "Invalid credentials",
+    [],
+    "ooniapi/auth.py:user_login"
+  ],
+  [
+    "InvalidRole",
+    "Invalid role",
+    [],
+    "ooniapi/auth.py:set_account_role"
+  ],
+  [
+    "AccountNotFound",
+    "Account not found",
+    [],
+    "ooniapi/auth.py:get_account_role"
+  ],
+  [
+    "JSONExpected",
+    "JSON expected",
+    [],
+    "ooniapi/probe_services.py:probe_login_post"
+  ],
+  [
+    "InvalidTokenFormat",
+    "Invalid token format",
+    [],
+    "ooniapi/probe_services.py:_check_probe_token"
+  ],
+  [
+    "InvalidJwtSignature",
+    "Invalid JWT signature",
+    [],
+    "ooniapi/probe_services.py:_check_probe_token"
+  ],
+  [
+    "UnknownError",
+    "Unknown error {exc}",
+    [
+      "exc"
+    ],
+    "ooniapi/probe_services.py:_check_probe_token"
+  ],
+  [
+    "MalformedRequest",
+    "Malformed request",
+    [],
+    "ooniapi/probe_services.py:bouncer_net_tests"
+  ],
+  [
+    "JsonExpected",
+    "JSON expected",
+    [],
+    "ooniapi/probe_services.py:open_report"
+  ],
+  [
+    "IncorrectFormat",
+    "Incorrect format",
+    [],
+    "ooniapi/probe_services.py:receive_measurement"
+  ]
+]

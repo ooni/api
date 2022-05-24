@@ -20,7 +20,7 @@ import jwt.exceptions  # debdeps: python3-jwt
 
 from ooniapi.config import metrics
 from ooniapi.database import query_click_one_row, insert_click
-from ooniapi.utils import nocachejson
+from ooniapi.utils import nocachejson, jer
 
 origins = [
     re.compile(r"^https://[-A-Za-z0-9]+\.ooni\.org$"),
@@ -61,12 +61,6 @@ Configuration parameters:
 
 # Courtesy of https://emailregex.com/
 EMAIL_RE = re.compile(r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)")
-
-
-def jerror(msg, code=400):
-    resp = make_response(jsonify(error=msg), code)
-    resp.cache_control.no_cache = True
-    return resp
 
 
 def create_jwt(payload: dict) -> str:
@@ -121,9 +115,9 @@ def role_required(roles):
                 tok = decode_jwt(token, audience="user_auth")
                 del token
                 if tok["role"] not in roles:
-                    return jerror("Role not authorized", 401)
+                    return jer("", "Role not authorized", 401)
             except Exception:
-                return jerror("Authentication required", 401)
+                return jer("", "Authentication required", 401)
 
             # check for session expunge
             # TODO: cache query?
@@ -138,7 +132,7 @@ def role_required(roles):
                 iat = datetime.utcfromtimestamp(tok["iat"])
                 print((iat, threshold))
                 if iat < threshold:
-                    return jerror("Authentication token expired", 401)
+                    return jer("", "Authentication token expired", 401)
 
             # attach account_id to request
             request._account_id = account_id
@@ -240,9 +234,9 @@ def user_register() -> Response:
     req = request.json if request.is_json else request.form
     email_address = req.get("email_address", "").strip().lower()
     if not email_address:
-        return jerror("Invalid request")
+        return jer("", "Invalid request")
     if EMAIL_RE.fullmatch(email_address) is None:
-        return jerror("Invalid email address")
+        return jer("", "Invalid email address")
 
     account_id = hash_email_address(email_address)
     now = datetime.utcnow()
@@ -261,7 +255,7 @@ def user_register() -> Response:
         log.info("email sent")
     except Exception as e:
         log.error(e, exc_info=True)
-        return jerror("Unable to send the email")
+        return jer("EmailError", "Unable to send the email")
 
     return make_response(jsonify(msg="ok"), 200)
 
@@ -305,11 +299,11 @@ def user_login() -> Response:
     try:
         dec = decode_jwt(token, audience="register")
     except jwt.exceptions.MissingRequiredClaimError:
-        return jerror("Invalid token type", code=401)
+        return jer("", "Invalid token type", 401)
     except jwt.exceptions.InvalidSignatureError:
-        return jerror("Invalid credential signature", code=401)
+        return jer("", "Invalid credential signature", 401)
     except jwt.exceptions.DecodeError:
-        return jerror("Invalid credentials", code=401)
+        return jer("", "Invalid credentials", 401)
 
     log.info("user login successful")
     # Store account role in token to prevent frequent DB lookups
@@ -404,9 +398,9 @@ def set_account_role() -> Response:
     role = req.get("role", "").strip().lower()
     email_address = req.get("email_address", "").strip().lower()
     if EMAIL_RE.fullmatch(email_address) is None:
-        return jerror("Invalid email address")
+        return jer("", "Invalid email address")
     if role not in ["user", "admin"]:
-        return jerror("Invalid role")
+        return jer("", "Invalid role")
 
     r = _set_account_role(email_address, role)
     log.info(f"Role set {r}")
@@ -476,12 +470,12 @@ def get_account_role(email_address) -> Response:
     log = current_app.logger
     email_address = email_address.strip().lower()
     if EMAIL_RE.fullmatch(email_address) is None:
-        return jerror("Invalid email address")
+        return jer("", "Invalid email address")
     account_id = hash_email_address(email_address)
     role = _get_account_role(account_id)
     if role is None:
         log.info(f"Getting account {account_id} role: not found")
-        return jerror("Account not found")
+        return jer("", "Account not found")
 
     log.info(f"Getting account {account_id} role: {role}")
     return nocachejson(role=role)
@@ -516,7 +510,7 @@ def set_session_expunge() -> Response:
     req = request.json if request.is_json else request.form
     email_address = req.get("email_address", "").strip().lower()
     if EMAIL_RE.fullmatch(email_address) is None:
-        return jerror("Invalid email address")
+        return jer("InvalidEmailAddress", "Invalid email address")
     account_id = hash_email_address(email_address)
     log.info(f"Setting expunge for account {account_id}")
     # If an entry is already in place update the threshold as the new
