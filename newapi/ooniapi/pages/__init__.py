@@ -52,21 +52,6 @@ def serve_master_css() -> Response:
     return send_file(fn)
 
 
-@pages_blueprint.route("/css/bootstrap.min.css")
-def serve_bootstrap_css() -> Response:
-    """Serve the Bootstrap CSS
-    ---
-    responses:
-      '200':
-        description: CSS
-    """
-    tpl = "/usr/%s/nodejs/bootstrap/dist/css/bootstrap.min.css"
-    try:
-        return send_file(tpl % "lib")
-    except FileNotFoundError:
-        return send_file(tpl % "share")
-
-
 @pages_blueprint.route("/css/bootstrap.min.js")
 def serve_bootstrap() -> Response:
     """TODO
