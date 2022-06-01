@@ -151,7 +151,7 @@ def test_user_register_and_get_metadata(client, mocksmtp):
     assert r.json == {'logged_in': False}
     _register_and_login(client, user_e)
     r = client.get("/api/_/account_metadata")
-    assert r.json == dict(role="user")
+    assert r.json == dict(role="user", logged_in=True)
 
 
 def test_role_set_not_allowed(client, mocksmtp):
