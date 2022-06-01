@@ -40,33 +40,6 @@ def index():
     return render_template("index.html")
 
 
-@pages_blueprint.route("/css/master.css")
-def serve_master_css() -> Response:
-    """Serve the Bootstrap CSS
-    ---
-    responses:
-      '200':
-        description: CSS
-    """
-    fn = "/usr/lib/python3/dist-packages/ooniapi/static/css/master.css"
-    return send_file(fn)
-
-
-@pages_blueprint.route("/css/bootstrap.min.js")
-def serve_bootstrap() -> Response:
-    """TODO
-    ---
-    responses:
-      '200':
-        description: TODO
-    """
-    tpl = "/usr/%s/nodejs/bootstrap/dist/js/bootstrap.min.js"
-    try:
-        return send_file(tpl % "lib")
-    except FileNotFoundError:
-        return send_file(tpl % "share")
-
-
 @pages_blueprint.route("/stats")
 def stats() -> Response:
     """TODO
