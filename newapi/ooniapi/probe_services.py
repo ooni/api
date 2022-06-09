@@ -82,8 +82,10 @@ def probe_geoip(probe_cc: str, asn: str) -> Tuple[Dict, str, int]:
 
     if probe_cc != "ZZ" and probe_cc != db_probe_cc:
         log.info(f"probe_cc != db_probe_cc ({probe_cc} != {db_probe_cc})")
+        metrics.incr("geoip_cc_differs")
     if asn != "AS0" and asn != db_asn:
         log.info(f"probe_asn != db_probe_as ({asn} != {db_asn})")
+        metrics.incr("geoip_asn_differs")
 
     # We always returns the looked up probe_cc and probe_asn to the probe
     resp: Dict[str, Any] = dict(v=1)
