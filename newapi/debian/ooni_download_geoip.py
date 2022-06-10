@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-import os
 import sys
 import gzip
 import shutil
 import logging
 
-import geoip2.database
+# debdeps: python3-geoip2
+import geoip2.database  # type: ignore
 from pathlib import Path
 from datetime import datetime
 from urllib.error import HTTPError
