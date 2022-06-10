@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""
+Updates asn.mmdb and cc.mmdb in /var/lib/ooniapi/
+Runs as a systemd timer.
+
+Monitor logs using: sudo journalctl --identifier ooni_download_geoip
+"""
+
 import sys
 import gzip
 import shutil
