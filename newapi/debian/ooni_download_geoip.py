@@ -78,8 +78,9 @@ def check_geoip_db(path: Path) -> None:
             assert r2 is not None, "database file is invalid"
 
 
+@metrics.timer("download_geoip")
 def download_geoip(url: str, filename: str) -> None:
-    log.info("Updating geoip database for {url} ({filename})")
+    log.info(f"Updating geoip database for {url} ({filename})")
 
     tmp_gz_out = OONI_API_DIR / f"{filename}.gz.tmp"
     tmp_out = OONI_API_DIR / f"{filename}.tmp"
@@ -95,7 +96,7 @@ def download_geoip(url: str, filename: str) -> None:
     try:
         check_geoip_db(tmp_out)
     except Exception as exc:
-        log.error("consistenty check on the geoip DB failed")
+        log.error(f"consistenty check on the geoip DB failed: {exc}")
         metrics.incr("ooni_geoip_checkfail")
         return
 
