@@ -24,6 +24,7 @@ log = logging.getLogger("ooni_download_geoip")
 
 try:
     from systemd.journal import JournalHandler  # debdeps: python3-systemd
+
     log.addHandler(JournalHandler(SYSLOG_IDENTIFIER="ooni_download_geoip"))
 except ImportError:
     pass
@@ -31,11 +32,13 @@ except ImportError:
 log.addHandler(logging.StreamHandler(sys.stdout))
 log.setLevel(logging.DEBUG)
 
+
 def get_request(url):
     req = Request(url)
     # We need to set the user-agent otherwise db-ip gives us a 403
     req.add_header("User-Agent", "ooni-downloader")
     return urlopen(req)
+
 
 def is_already_updated():
     try:
@@ -45,6 +48,7 @@ def is_already_updated():
         return False
 
     return current_ts == TS
+
 
 def is_latest_available(url: str):
     log.info(f"fetching {url}")
@@ -58,8 +62,11 @@ def is_latest_available(url: str):
         log.info(f"unexpected status code '{err.code}' in {url}")
         return False
 
+
 def check_geoip_db(path: Path):
-    assert any([x in path.name for x in ("cc", "asn")]), "invalid path argument supplied"
+    assert any(
+        [x in path.name for x in ("cc", "asn")]
+    ), "invalid path argument supplied"
 
     with geoip2.database.Reader(str(path)) as reader:
         if "asn" in path.name:
@@ -70,11 +77,12 @@ def check_geoip_db(path: Path):
             r2 = reader.country("8.8.8.8")
             assert r2 is not None, "database file is invalid"
 
+
 def download_geoip(url: str, filename: str):
     log.info("Updating geoip database for {url} ({filename})")
 
-    tmp_gz_out = (OONI_API_DIR / f"{filename}.gz.tmp")
-    tmp_out = (OONI_API_DIR / f"{filename}.tmp")
+    tmp_gz_out = OONI_API_DIR / f"{filename}.gz.tmp"
+    tmp_out = OONI_API_DIR / f"{filename}.tmp"
 
     with get_request(url) as resp:
         with tmp_gz_out.open("wb") as out_file:
@@ -93,6 +101,7 @@ def download_geoip(url: str, filename: str):
 
     tmp_out.rename(OONI_API_DIR / filename)
 
+
 def update_geoip():
     OONI_API_DIR.mkdir(parents=True, exist_ok=True)
     download_geoip(ASN_URL, "asn.mmdb")
@@ -104,6 +113,7 @@ def update_geoip():
     log.info("Updated GeoIP databases")
     metrics.incr("ooni_geoip_updated")
 
+
 def main():
     if is_already_updated():
         log.debug("Database already updated. Exiting.")
@@ -114,6 +124,7 @@ def main():
         sys.exit(0)
 
     update_geoip()
+
 
 if __name__ == "__main__":
     main()
