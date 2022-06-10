@@ -70,10 +70,16 @@ def check_geoip_db(path: Path) -> None:
         if "asn" in path.name:
             r1 = reader.asn("8.8.8.8")
             assert r1 is not None, "database file is invalid"
+            m = reader.metadata()
+            metrics.gauge("geoip_asn_node_cnt", m.node_count)
+            metrics.gauge("geoip_asn_epoch", m.build_epoch)
 
         elif "cc" in path.name:
             r2 = reader.country("8.8.8.8")
             assert r2 is not None, "database file is invalid"
+            m = reader.metadata()
+            metrics.gauge("geoip_cc_node_cnt", m.node_count)
+            metrics.gauge("geoip_cc_epoch", m.build_epoch)
 
 
 @metrics.timer("download_geoip")
