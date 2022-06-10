@@ -64,9 +64,7 @@ def is_latest_available(url: str) -> bool:
 
 
 def check_geoip_db(path: Path) -> None:
-    assert any(
-        [x in path.name for x in ("cc", "asn")]
-    ), "invalid path argument supplied"
+    assert "cc" in path.name or "asn" in path.name, "invalid path"
 
     with geoip2.database.Reader(str(path)) as reader:
         if "asn" in path.name:
