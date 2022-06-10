@@ -40,7 +40,7 @@ def get_request(url):
     return urlopen(req)
 
 
-def is_already_updated():
+def is_already_updated() -> bool:
     try:
         with (OONI_API_DIR / "geoipdbts").open() as in_file:
             current_ts = in_file.read()
@@ -50,7 +50,7 @@ def is_already_updated():
     return current_ts == TS
 
 
-def is_latest_available(url: str):
+def is_latest_available(url: str) -> bool:
     log.info(f"fetching {url}")
     try:
         resp = get_request(url)
@@ -63,7 +63,7 @@ def is_latest_available(url: str):
         return False
 
 
-def check_geoip_db(path: Path):
+def check_geoip_db(path: Path) -> None:
     assert any(
         [x in path.name for x in ("cc", "asn")]
     ), "invalid path argument supplied"
@@ -78,7 +78,7 @@ def check_geoip_db(path: Path):
             assert r2 is not None, "database file is invalid"
 
 
-def download_geoip(url: str, filename: str):
+def download_geoip(url: str, filename: str) -> None:
     log.info("Updating geoip database for {url} ({filename})")
 
     tmp_gz_out = OONI_API_DIR / f"{filename}.gz.tmp"
@@ -102,7 +102,7 @@ def download_geoip(url: str, filename: str):
     tmp_out.rename(OONI_API_DIR / filename)
 
 
-def update_geoip():
+def update_geoip() -> None:
     OONI_API_DIR.mkdir(parents=True, exist_ok=True)
     download_geoip(ASN_URL, "asn.mmdb")
     download_geoip(CC_URL, "cc.mmdb")
