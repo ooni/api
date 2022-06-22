@@ -180,7 +180,7 @@ def api_private_quotas_summary() -> Response:
 
 @api_private_blueprint.route("/check_report_id", methods=["GET"])
 def check_report_id() -> Response:
-    """Check if a report_id exists in the fastpath table
+    """Legacy. Used to check if a report_id existed in the fastpath table.
     Used by https://github.com/ooni/probe/issues/1034
     ---
     produces:
@@ -188,14 +188,10 @@ def check_report_id() -> Response:
     parameters:
       - name: report_id
         in: query
-        example: 20210208T162755Z_ndt_DZ_36947_n1_8swgXi7xNuRUyO9a
         type: string
-        minLength: 10
-        required: true
     responses:
       200:
-        description: Check if a report_id exists in the fastpath table.
-          Cached for a short time.
+        description: Always returns True.
         schema:
           type: object
           properties:
@@ -204,10 +200,7 @@ def check_report_id() -> Response:
               description: version number of this response
             found:
               type: boolean
-              description: True if found
-            error:
-              type: string
-              description: error message
+              description: True
           example: { "found": true, "v": 0 }
 
     """
