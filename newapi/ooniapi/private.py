@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 from itertools import product
 
 from urllib.parse import urljoin, urlencode
-from typing import Dict, List
+from typing import Dict
 
 import logging
 import math
@@ -211,15 +211,7 @@ def check_report_id() -> Response:
           example: { "found": true, "v": 0 }
 
     """
-    report_id = request.args.get("report_id")
-    s = sql.text("SELECT 1 FROM fastpath WHERE report_id = :rid LIMIT 1")
-    try:
-        q = query_click_one_row(s, dict(rid=report_id))
-        found = q is not None
-        return cachedjson("2m", v=0, found=found)
-
-    except Exception as e:
-        return cachedjson("0s", v=0, error=str(e))
+    return cachedjson("1s", v=0, found=True)
 
 
 def last_30days(begin=31, end=1):
