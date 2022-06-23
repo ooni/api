@@ -120,8 +120,8 @@ def compute_priorities(entries, prio_rules):
 @metrics.timer("fetch_reactive_url_list")
 def fetch_reactive_url_list(cc: str, probe_asn: int):
     """Select all citizenlab URLs for the given probe_cc + ZZ
-    Select measurements count from the last 7 days in a left outer join
-    (without any info about priority)"""
+    Select measurements count from the current and previous week
+    using a left outer join (without any info about priority)"""
     q = """
 SELECT category_code, domain, url, cc, COALESCE(msmt_cnt, 0) AS msmt_cnt
 FROM (
