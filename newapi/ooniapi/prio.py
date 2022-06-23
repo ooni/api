@@ -135,6 +135,7 @@ LEFT OUTER JOIN (
     SELECT input, SUM(msmt_cnt) AS msmt_cnt
     FROM counters_asn_test_list
     WHERE probe_cc = :cc
+    AND (week IN (toStartOfWeek(now()), toStartOfWeek(now() - interval 1 week)))
     --asn-filter--
     GROUP BY input
 ) AS cnt
