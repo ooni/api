@@ -3,22 +3,17 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-from hashlib import shake_128
 from typing import Optional, List, Dict, Union
 import os
 
 from flask import current_app
 
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql.elements import TextClause
 from sqlalchemy.sql.selectable import Select
 
 # debdeps: python3-clickhouse-driver
 from clickhouse_driver import Client as Clickhouse
-
-# query_time = Summary("query", "query", ["hash", ], registry=metrics.registry)
-Base = declarative_base()
 
 
 def _gen_application_name():  # pragma: no cover
@@ -32,13 +27,6 @@ def _gen_application_name():  # pragma: no cover
 
     pid = os.getpid()
     return f"api-{mid}-{pid}"
-
-
-def query_hash(q: str) -> str:
-    """Short hash used to identify query statements.
-    Allows correlating query statements between API logs and metrics
-    """
-    return shake_128(q.encode()).hexdigest(4)
 
 
 # # Clickhouse
