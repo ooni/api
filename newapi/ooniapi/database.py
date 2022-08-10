@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 
 from typing import Optional, List, Dict, Union
 import os
+import time
 
 from flask import current_app
 
@@ -14,6 +15,7 @@ from sqlalchemy.sql.selectable import Select
 
 # debdeps: python3-clickhouse-driver
 from clickhouse_driver import Client as Clickhouse
+from clickhouse_driver.errors import NetworkError
 
 
 def _gen_application_name():  # pragma: no cover
@@ -45,7 +47,16 @@ Query = Union[str, TextClause, Select]
 def _run_query(query: Query, query_params: dict):
     if isinstance(query, (Select, TextClause)):
         query = str(query.compile(dialect=postgresql.dialect()))
-    q = current_app.click.execute(query, query_params, with_column_types=True)
+    retry_time = 0.1
+    for retry in range(1, 10):
+        try:
+            q = current_app.click.execute(query, query_params, with_column_types=True)
+            continue
+        except NetworkError:
+            print(f"NetworkError - retrying query in {retry_time} s")
+            time.sleep(retry_time)
+            retry_time *= 2
+
     rows, coldata = q
     colnames, coltypes = tuple(zip(*coldata))
     return colnames, rows
@@ -66,4 +77,5 @@ def query_click_one_row(query: Query, query_params: dict) -> Optional[dict]:
 
 def insert_click(query, rows: list) -> int:
     assert isinstance(rows, list)
+    # TODO retries?
     return current_app.click.execute(query, rows, types_check=True)
