@@ -27,6 +27,7 @@ def shell():
         code.interact(banner="", local=current_app.make_shell_context())
 
 
+# FIXME unused / dead
 @cli.command()
 @with_appcontext
 def create_tables():
