@@ -244,9 +244,9 @@ def check_in() -> Response:
         )
     except Exception as e:
         log.error(e, exc_info=True)
-        # TODO: use same failover as prio.py:list_test_urls
-        # failover_generate_test_list runs without any database interaction
-        # test_items = failover_generate_test_list(country_code, category_codes, limit)
+        # TODO: use same fallback as prio.py:list_test_urls
+        # fallback_generate_test_list runs without any database interaction
+        # test_items = fallback_generate_test_list(country_code, category_codes, limit)
         test_items = []
 
     metrics.gauge("check-in-test-list-count", len(test_items))

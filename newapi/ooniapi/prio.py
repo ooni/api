@@ -37,17 +37,17 @@ from ooniapi.measurements import param_asn
 prio_bp = Blueprint("prio", "probe_services_prio")
 
 
-# # failover algorithm
+# # fallback algorithm
 
 CTZ = namedtuple("CTZ", ["url", "category_code"])
-failover_test_items: Dict[str, List[CTZ]] = {}
+fallback_test_items: Dict[str, List[CTZ]] = {}
 
 
-def failover_fetch_citizenlab_data() -> Dict[str, List[CTZ]]:
+def fallback_fetch_citizenlab_data() -> Dict[str, List[CTZ]]:
     """Fetches the citizenlab table from the database.
-    Used only once at startime for failover."""
+    Used only once at startime for fallback."""
     log = current_app.logger
-    log.info("Started failover_fetch_citizenlab_data")
+    log.info("Started fallback_fetch_citizenlab_data")
     sql = """SELECT category_code, url
     FROM citizenlab
     WHERE cc = 'ZZ'
@@ -63,16 +63,16 @@ def failover_fetch_citizenlab_data() -> Dict[str, List[CTZ]]:
     return out
 
 
-def failover_generate_test_list(country_code: str, category_codes: tuple, limit: int):
-    global failover_test_items
+def fallback_generate_test_list(country_code: str, category_codes: tuple, limit: int):
+    global fallback_test_items
     if not category_codes:
-        category_codes = tuple(failover_test_items.keys())
+        category_codes = tuple(fallback_test_items.keys())
 
     candidates: List[CTZ] = []
     for catcode in category_codes:
-        if catcode not in failover_test_items:
+        if catcode not in fallback_test_items:
             continue
-        new = failover_test_items[catcode]
+        new = fallback_test_items[catcode]
         candidates.extend(new)
 
     limit = min(limit, len(candidates))
@@ -252,9 +252,9 @@ def list_test_urls() -> Response:
                     type: string
 
     """
-    global failover_test_items
-    if failover_test_items == {}:  # initialize once
-        failover_test_items = failover_fetch_citizenlab_data()
+    global fallback_test_items
+    if fallback_test_items == {}:  # initialize once
+        fallback_test_items = fallback_fetch_citizenlab_data()
 
     log = current_app.logger
     param = request.args.get
@@ -276,8 +276,8 @@ def list_test_urls() -> Response:
         )
     except Exception as e:
         log.error(e, exc_info=True)
-        # failover_generate_test_list runs without any database interaction
-        test_items = failover_generate_test_list(country_code, category_codes, limit)
+        # fallback_generate_test_list runs without any database interaction
+        test_items = fallback_generate_test_list(country_code, category_codes, limit)
 
     # TODO: remove current_page / next_url / pages ?
     metrics.gauge("test-list-urls-count", len(test_items))
