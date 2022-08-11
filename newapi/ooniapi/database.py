@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 
 from typing import Optional, List, Dict, Union
 import os
-import time
 
 from flask import current_app
 
@@ -16,6 +15,8 @@ from sqlalchemy.sql.selectable import Select
 # debdeps: python3-clickhouse-driver
 from clickhouse_driver import Client as Clickhouse
 from clickhouse_driver.errors import NetworkError
+
+from ooniapi.config import metrics
 
 
 def _gen_application_name():  # pragma: no cover
@@ -47,15 +48,11 @@ Query = Union[str, TextClause, Select]
 def _run_query(query: Query, query_params: dict):
     if isinstance(query, (Select, TextClause)):
         query = str(query.compile(dialect=postgresql.dialect()))
-    retry_time = 0.1
-    for retry in range(1, 10):
         try:
             q = current_app.click.execute(query, query_params, with_column_types=True)
-            continue
         except NetworkError:
-            print(f"NetworkError - retrying query in {retry_time} s")
-            time.sleep(retry_time)
-            retry_time *= 2
+            metrics.incr("database_connection_error")
+            raise Exception("Database connection error")
 
     rows, coldata = q
     colnames, coltypes = tuple(zip(*coldata))
