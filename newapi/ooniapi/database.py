@@ -39,7 +39,11 @@ def init_clickhouse_db(app) -> None:
     """Initializes Clickhouse session"""
     url = app.config["CLICKHOUSE_URL"]
     app.logger.info("Connecting to Clickhouse")
+    # lazy execution - it will connect on the first query
+    url = "clickhouse://clickhouse:8000/default"
     app.click = Clickhouse.from_url(url)
+    app.click.connection.connect_timeout = 1
+    app.click.connection.sync_request_timeout = 1
 
 
 Query = Union[str, TextClause, Select]
