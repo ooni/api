@@ -52,11 +52,12 @@ Query = Union[str, TextClause, Select]
 def _run_query(query: Query, query_params: dict):
     if isinstance(query, (Select, TextClause)):
         query = str(query.compile(dialect=postgresql.dialect()))
-        try:
-            q = current_app.click.execute(query, query_params, with_column_types=True)
-        except NetworkError:
-            metrics.incr("database_connection_error")
-            raise Exception("Database connection error")
+
+    try:
+        q = current_app.click.execute(query, query_params, with_column_types=True)
+    except NetworkError:
+        metrics.incr("database_connection_error")
+        raise Exception("Database connection error")
 
     rows, coldata = q
     colnames, coltypes = tuple(zip(*coldata))
