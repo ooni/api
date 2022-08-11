@@ -7,10 +7,12 @@ After=network-online.target
 ExecStart=/usr/bin/gunicorn3 \
   --config file:/etc/ooni/api.gunicorn.py \
   ooniapi.wsgi
-
-Restart=on-abort
+ExecReload=/bin/kill -s HUP $MAINPID
 Type=simple
+Restart=on-abort
 RestartSec=2s
+KillMode=mixed
+TimeoutStopSec=30
 
 User=ooniapi
 Group=ooniapi

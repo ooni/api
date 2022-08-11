@@ -16,6 +16,9 @@ case "$1" in
           nginx -t
           systemctl reload nginx
         fi
+        echo "reloading ooni-api.service from postinst script" | systemd-cat -p info -t ooni-api
+        systemctl reload ooni-api.service
+        echo "reloading ooni-api.service from postinst script done" | systemd-cat -p info -t ooni-api
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
