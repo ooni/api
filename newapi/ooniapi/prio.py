@@ -43,11 +43,24 @@ CTZ = namedtuple("CTZ", ["url", "category_code"])
 fallback_test_items: Dict[str, List[CTZ]] = {}
 
 
+def init_fallback_test_list(log, app):
+    """Fetches the citizenlab table from the database.
+    Used only once at startime for fallback."""
+    global fallback_test_items
+    with app.app_context():
+        log = current_app.logger
+        log.info("initializing fallback test-list")
+        assert fallback_test_items == {}
+        fallback_test_items = fallback_fetch_citizenlab_data()
+
+    n = len(fallback_test_items)
+    metrics.gauge("fallback_test_list_size", n)
+    log.info("initialized fallback test-list")
+
+
 def fallback_fetch_citizenlab_data() -> Dict[str, List[CTZ]]:
     """Fetches the citizenlab table from the database.
     Used only once at startime for fallback."""
-    log = current_app.logger
-    log.info("Started fallback_fetch_citizenlab_data")
     sql = """SELECT category_code, url
     FROM citizenlab
     WHERE cc = 'ZZ'
@@ -59,7 +72,6 @@ def fallback_fetch_citizenlab_data() -> Dict[str, List[CTZ]]:
         c = CTZ(e["url"], catcode)
         out.setdefault(catcode, []).append(c)
 
-    log.info("Fetch done: %d" % len(out))
     return out
 
 
@@ -253,8 +265,6 @@ def list_test_urls() -> Response:
 
     """
     global fallback_test_items
-    if fallback_test_items == {}:  # initialize once
-        fallback_test_items = fallback_fetch_citizenlab_data()
 
     log = current_app.logger
     param = request.args.get

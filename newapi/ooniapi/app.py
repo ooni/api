@@ -28,6 +28,7 @@ from flasgger import Swagger
 
 from decimal import Decimal
 from ooniapi.database import init_clickhouse_db
+from ooniapi.prio import init_fallback_test_list
 
 APP_DIR = os.path.dirname(__file__)
 
@@ -181,6 +182,9 @@ def create_app(*args, testmode=False, **kw):
     init_app(app, testmode=testmode)
 
     init_clickhouse_db(app)
+
+    log = logging.getLogger("ooni-api")
+    init_fallback_test_list(log, app)
 
     # Setup rate limiting
     # NOTE: the limits apply per-process. The number of processes is set in:
