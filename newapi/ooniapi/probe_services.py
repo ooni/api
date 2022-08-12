@@ -225,15 +225,13 @@ def check_in() -> Response:
     else:
         url_limit = 20
 
+    category_codes = ()
     if "web_connectivity" in data:
-        catcodes = data["web_connectivity"].get("category_codes", [])
+        catcodes = data["web_connectivity"].get("category_codes") or []
         if isinstance(catcodes, str):
-            category_codes = catcodes.split(",")
+            category_codes = tuple(catcodes.split(","))  # type: ignore
         else:
-            category_codes = catcodes
-
-    else:
-        category_codes = []
+            category_codes = tuple(catcodes)  # type: ignore
 
     for c in category_codes:
         assert c.isalpha()
