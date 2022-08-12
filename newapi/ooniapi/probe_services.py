@@ -225,7 +225,7 @@ def check_in() -> Response:
     else:
         url_limit = 20
 
-    category_codes = ()
+    category_codes: Tuple[str, ...] = ()
     if "web_connectivity" in data:
         catcodes = data["web_connectivity"].get("category_codes") or []
         if isinstance(catcodes, str):
