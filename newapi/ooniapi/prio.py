@@ -50,8 +50,11 @@ def init_fallback_test_list(log, app):
     with app.app_context():
         log = current_app.logger
         log.info("initializing fallback test-list")
-        assert fallback_test_items == {}
-        fallback_test_items = fallback_fetch_citizenlab_data()
+        try:
+            fallback_test_items = fallback_fetch_citizenlab_data()
+        except Exception:
+            log.error("fallback test-list init error", exc_info=True)
+            return
 
     n = len(fallback_test_items)
     metrics.gauge("fallback_test_list_size", n)
