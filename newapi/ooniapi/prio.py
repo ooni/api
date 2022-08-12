@@ -267,8 +267,6 @@ def list_test_urls() -> Response:
                     type: string
 
     """
-    global fallback_test_items
-
     log = current_app.logger
     param = request.args.get
     try:

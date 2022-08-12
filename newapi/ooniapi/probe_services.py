@@ -21,7 +21,7 @@ from ooniapi.config import metrics
 from ooniapi.utils import cachedjson, nocachejson
 
 from ooniapi.auth import create_jwt, decode_jwt
-from ooniapi.prio import generate_test_list
+from ooniapi.prio import generate_test_list, fallback_generate_test_list
 
 probe_services_blueprint = Blueprint("ps_api", "probe_services")
 
@@ -246,8 +246,7 @@ def check_in() -> Response:
         log.error(e, exc_info=True)
         # TODO: use same fallback as prio.py:list_test_urls
         # fallback_generate_test_list runs without any database interaction
-        # test_items = fallback_generate_test_list(country_code, category_codes, limit)
-        test_items = []
+        test_items = fallback_generate_test_list(probe_cc, category_codes, url_limit)
 
     metrics.gauge("check-in-test-list-count", len(test_items))
     try:
