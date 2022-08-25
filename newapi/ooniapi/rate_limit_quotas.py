@@ -90,7 +90,6 @@ class Limiter:
         for b, period in zip(self._ipaddr_buckets, periods):
             size = len(b)
             metrics.gauge(f"rate-limit-ipaddrs-{period}", size)
-            print(size)
 
     def refresh_quota_counters_if_needed(self):
         t = time.monotonic()

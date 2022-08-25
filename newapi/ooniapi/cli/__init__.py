@@ -27,14 +27,5 @@ def shell():
         code.interact(banner="", local=current_app.make_shell_context())
 
 
-@cli.command()
-@with_appcontext
-def create_tables():
-    from ooniapi.database import Base
-    from ooniapi import models
-
-    Base.metadata.create_all(bind=current_app.db_engine)
-
-
 if __name__ == "__main__":
     cli()

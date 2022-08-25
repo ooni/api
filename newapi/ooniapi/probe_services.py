@@ -21,7 +21,7 @@ from ooniapi.config import metrics
 from ooniapi.utils import cachedjson, nocachejson
 
 from ooniapi.auth import create_jwt, decode_jwt
-from ooniapi.prio import generate_test_list
+from ooniapi.prio import generate_test_list, fallback_generate_test_list
 
 probe_services_blueprint = Blueprint("ps_api", "probe_services")
 
@@ -225,15 +225,13 @@ def check_in() -> Response:
     else:
         url_limit = 20
 
+    category_codes: Tuple[str, ...] = ()
     if "web_connectivity" in data:
-        catcodes = data["web_connectivity"].get("category_codes", [])
+        catcodes = data["web_connectivity"].get("category_codes") or []
         if isinstance(catcodes, str):
-            category_codes = catcodes.split(",")
+            category_codes = tuple(catcodes.split(","))  # type: ignore
         else:
-            category_codes = catcodes
-
-    else:
-        category_codes = []
+            category_codes = tuple(catcodes)  # type: ignore
 
     for c in category_codes:
         assert c.isalpha()
@@ -244,10 +242,8 @@ def check_in() -> Response:
         )
     except Exception as e:
         log.error(e, exc_info=True)
-        # TODO: use same failover as prio.py:list_test_urls
-        # failover_generate_test_list runs without any database interaction
-        # test_items = failover_generate_test_list(country_code, category_codes, limit)
-        test_items = []
+        # fallback_generate_test_list runs without any database interaction
+        test_items = fallback_generate_test_list(probe_cc, category_codes, url_limit)
 
     metrics.gauge("check-in-test-list-count", len(test_items))
     try:
@@ -530,7 +526,7 @@ def list_test_helpers() -> Response:
     probe_ipaddr = request.headers.get("X-Real-Ip", "0.0.0.0")
     try:
         last_oct = int(probe_ipaddr.rsplit(".", 1)[1])
-    except:
+    except Exception:
         last_oct = 0
     th0, th1 = last_oct % 2, (last_oct + 1) % 2
     j["web-connectivity"] = [
@@ -589,7 +585,6 @@ def serve_psiphon_config() -> Response:
       200:
         description: TODO
     """
-    log = current_app.logger
     err = _check_probe_token("psiphon")
     if err:
         return err
@@ -616,7 +611,6 @@ def serve_tor_targets() -> Response:
       200:
         description: TODO
     """
-    log = current_app.logger
     err = _check_probe_token("tor_targets")
     if err:
         return err

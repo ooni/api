@@ -3,22 +3,20 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-from hashlib import shake_128
 from typing import Optional, List, Dict, Union
 import os
 
 from flask import current_app
 
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql.elements import TextClause
 from sqlalchemy.sql.selectable import Select
 
 # debdeps: python3-clickhouse-driver
 from clickhouse_driver import Client as Clickhouse
+from clickhouse_driver.errors import NetworkError
 
-# query_time = Summary("query", "query", ["hash", ], registry=metrics.registry)
-Base = declarative_base()
+from ooniapi.config import metrics
 
 
 def _gen_application_name():  # pragma: no cover
@@ -34,13 +32,6 @@ def _gen_application_name():  # pragma: no cover
     return f"api-{mid}-{pid}"
 
 
-def query_hash(q: str) -> str:
-    """Short hash used to identify query statements.
-    Allows correlating query statements between API logs and metrics
-    """
-    return shake_128(q.encode()).hexdigest(4)
-
-
 # # Clickhouse
 
 
@@ -48,7 +39,10 @@ def init_clickhouse_db(app) -> None:
     """Initializes Clickhouse session"""
     url = app.config["CLICKHOUSE_URL"]
     app.logger.info("Connecting to Clickhouse")
+    # lazy execution - it will connect on the first query
     app.click = Clickhouse.from_url(url)
+    app.click.connection.connect_timeout = 1
+    app.click.connection.sync_request_timeout = 1
 
 
 Query = Union[str, TextClause, Select]
@@ -57,7 +51,13 @@ Query = Union[str, TextClause, Select]
 def _run_query(query: Query, query_params: dict):
     if isinstance(query, (Select, TextClause)):
         query = str(query.compile(dialect=postgresql.dialect()))
-    q = current_app.click.execute(query, query_params, with_column_types=True)
+
+    try:
+        q = current_app.click.execute(query, query_params, with_column_types=True)
+    except NetworkError:
+        metrics.incr("database_connection_error")
+        raise Exception("Database connection error")
+
     rows, coldata = q
     colnames, coltypes = tuple(zip(*coldata))
     return colnames, rows
@@ -78,4 +78,5 @@ def query_click_one_row(query: Query, query_params: dict) -> Optional[dict]:
 
 def insert_click(query, rows: list) -> int:
     assert isinstance(rows, list)
+    # TODO retries?
     return current_app.click.execute(query, rows, types_check=True)
