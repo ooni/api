@@ -1,3 +1,9 @@
+ooni-api (1.0.43) UNRELEASED; urgency=medium
+
+  * API uploader: support meek
+
+ -- Federico Ceratto <federico@debian.org>  Thu, 02 Mar 2023 22:15:53 +0000
+
 ooni-api (1.0.42) unstable; urgency=medium
 
   * Fix keys for user reporting mechanism
