@@ -35,7 +35,7 @@ except ImportError:
 log.setLevel(logging.DEBUG)
 
 
-def create_s3_client(conf):
+def create_s3_client(conf: dict):
     session = boto3.Session(
         aws_access_key_id=conf.get("aws_access_key_id"),
         aws_secret_access_key=conf.get("aws_secret_access_key"),
@@ -51,7 +51,7 @@ def read_conf():
     return conf["DEFAULT"]
 
 
-def connect_to_db(conf):
+def connect_to_db(conf: dict):
     default = "clickhouse://api:api@localhost/default"
     uri = conf.get("db_uri", default)
     log.info(f"Connecting to database on {uri}")
@@ -60,7 +60,7 @@ def connect_to_db(conf):
 
 
 @metrics.timer("update_db_table")
-def update_db_table(conn, lookup_list, jsonl_s3path):
+def update_db_table(conn, lookup_list: List[Dict], jsonl_s3path: str) -> None:
     for d in lookup_list:
         d["s3path"] = jsonl_s3path
 
@@ -78,6 +78,10 @@ def upload_to_s3(s3, bucket_name: str, tarf: PP, s3path: str) -> None:
 
 @metrics.timer("fill_postcan")
 def fill_postcan(hourdir: PP, postcanf: PP) -> List[PP]:
+    """Read .post files from hourdir and add them into a tarball `postcanf`
+    until it exceeds `postcan_byte_thresh` or there are no more .post files.
+    Returns a list of only the .post files that were added to the tarball
+    """
     msmt_files = sorted(f for f in hourdir.iterdir() if f.suffix == ".post")
     if not msmt_files:
         log.info(f"Nothing to fill {postcanf.name}")
@@ -104,7 +108,7 @@ def fill_postcan(hourdir: PP, postcanf: PP) -> List[PP]:
 def fill_jsonl(measurements: List[PP], jsonlf: PP) -> List[Dict]:
     log.info(f"Filling {jsonlf.name}")
     # report_id, input, 2020092119_IT_tor.n0.0.jsonl.gz
-    lookup_list = []
+    lookup_list: List[Dict] = []
     with gzip.open(jsonlf, "w") as jf:
         for linenum, msmt_f in enumerate(measurements):
             try:
@@ -120,7 +124,7 @@ def fill_jsonl(measurements: List[PP], jsonlf: PP) -> List[Dict]:
                 msm = post.get("content", {})
             elif fmt == "yaml":
                 try:
-                    msm = yaml.load(msm, Loader=yaml.CLoader)
+                    msm = yaml.load(msm, Loader=yaml.CLoader)  # type: ignore
                 except Exception:
                     pass
 
@@ -147,6 +151,12 @@ def delete_msmt_posts(measurements: List[PP]) -> None:
     log.info(f"Deleting {len(measurements)} measurements")
     for msmt_f in measurements:
         msmt_f.unlink()
+
+
+def serialize_iterable_inputs(lookup_list: List[Dict]) -> None:
+    for ml in lookup_list:
+        if isinstance(ml.get("input"), list):
+            ml["input"] = "|".join(ml["input"])
 
 
 @metrics.timer("total_run_time")
@@ -208,6 +218,7 @@ def main():
             else:
                 upload_to_s3(s3, bucket_name, postcanf, postcan_s3path)
                 upload_to_s3(s3, bucket_name, jsonlf, jsonl_s3path)
+                serialize_iterable_inputs(lookup_list)
                 update_db_table(db_conn, lookup_list, jsonl_s3path)
 
             postcanf.unlink()
