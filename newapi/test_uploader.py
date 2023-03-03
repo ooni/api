@@ -119,6 +119,7 @@ def test_update_db_table():
         }
     ]
     jsonl_s3path = "raw/bogus.jsonl"
+    up.serialize_iterable_inputs(lookup_list)
     up.update_db_table(click, lookup_list, jsonl_s3path)
 
     click.execute.assert_called_with(
@@ -146,13 +147,14 @@ def test_update_db_table_meek():
         }
     ]
     jsonl_s3path = "raw/bogus.jsonl"
+    up.serialize_iterable_inputs(lookup_list)
     up.update_db_table(click, lookup_list, jsonl_s3path)
 
     click.execute.assert_called_with(
         "INSERT INTO jsonl (report_id, input, s3path, linenum, measurement_uid) VALUES",
         [
             {
-                "input": ["bogus_input", "bogus_input_2"],
+                "input": "bogus_input|bogus_input_2",
                 "linenum": 0,
                 "measurement_uid": "bogus_post_filename",
                 "report_id": "bogus_rid",

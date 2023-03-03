@@ -153,6 +153,12 @@ def delete_msmt_posts(measurements: List[PP]) -> None:
         msmt_f.unlink()
 
 
+def serialize_iterable_inputs(lookup_list: List[Dict]) -> None:
+    for ml in lookup_list:
+        if isinstance(ml.get("input"), list):
+            ml["input"] = "|".join(ml["input"])
+
+
 @metrics.timer("total_run_time")
 def main():
     conf = read_conf()
@@ -212,6 +218,7 @@ def main():
             else:
                 upload_to_s3(s3, bucket_name, postcanf, postcan_s3path)
                 upload_to_s3(s3, bucket_name, jsonlf, jsonl_s3path)
+                serialize_iterable_inputs(lookup_list)
                 update_db_table(db_conn, lookup_list, jsonl_s3path)
 
             postcanf.unlink()
